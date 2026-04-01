@@ -18,6 +18,13 @@ type ProfileRow = {
   roles: { code: RoleCode } | { code: RoleCode }[] | null;
 };
 
+type BasicProfileRow = {
+  full_name: string;
+  technician_code: string | null;
+  active: boolean;
+  role_id: string | null;
+};
+
 function extractRoleCode(rolePayload: ProfileRow["roles"]): RoleCode | null {
   if (Array.isArray(rolePayload)) {
     return rolePayload[0]?.code ?? null;
@@ -43,20 +50,43 @@ export async function getSupabaseAuthenticatedUser(): Promise<AuthenticatedUser 
     return null;
   }
 
-  const profileResult = await supabase
+  const joinedProfileResult = await supabase
     .from("user_profiles")
     .select("full_name, technician_code, active, roles!inner(code)")
     .eq("user_id", authUser.id)
     .is("deleted_at", null)
     .maybeSingle<ProfileRow>();
-  const profile = profileResult.data;
 
-  if (!profile || !profile.active) {
-    return null;
+  let profile = joinedProfileResult.data;
+  let role = extractRoleCode(joinedProfileResult.data?.roles ?? null);
+
+  if (!profile || !role) {
+    const basicProfileResult = await supabase
+      .from("user_profiles")
+      .select("full_name, technician_code, active, role_id")
+      .eq("user_id", authUser.id)
+      .is("deleted_at", null)
+      .maybeSingle<BasicProfileRow>();
+
+    const basicProfile = basicProfileResult.data;
+    const bootstrapAccount = authUser.email
+      ? findBootstrapAccountByEmail(authUser.email)
+      : null;
+
+    if (!basicProfile || !basicProfile.active) {
+      return null;
+    }
+
+    profile = {
+      full_name: basicProfile.full_name,
+      technician_code: basicProfile.technician_code,
+      active: basicProfile.active,
+      roles: bootstrapAccount ? { code: bootstrapAccount.role } : null,
+    };
+    role = bootstrapAccount?.role ?? null;
   }
 
-  const role = extractRoleCode(profile.roles);
-  if (!role) {
+  if (!profile || !profile.active || !role) {
     return null;
   }
 
