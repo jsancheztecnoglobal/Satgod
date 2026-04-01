@@ -68,16 +68,21 @@ async function loadSnapshot(supabase: SupabaseClient): Promise<Snapshot> {
       supabase.from("company_sites").select("*").is("deleted_at", null).order("created_at"),
       supabase.from("assets").select("*, asset_types(code)").is("deleted_at", null).order("created_at"),
       supabase.from("work_orders").select("*").is("deleted_at", null).order("created_at"),
-      supabase.from("work_order_assignments").select("*, user_profiles!inner(technician_code, full_name)").order("scheduled_start"),
+      supabase.from("work_order_assignments").select("*").order("scheduled_start"),
       supabase.from("work_reports").select("*").order("created_at"),
       supabase.from("material_usage").select("*, material_catalog(sku, name, unit)").order("created_at"),
       supabase.from("attachments").select("*").is("deleted_at", null).order("created_at"),
-      supabase.from("user_profiles").select("user_id, full_name, technician_code, active, roles!inner(code)").is("deleted_at", null).order("full_name"),
+      supabase.from("user_profiles").select("user_id, full_name, technician_code, active").is("deleted_at", null).order("full_name"),
     ]);
 
   for (const result of [companies, sites, assets, workOrders, assignments, reports, materials, attachments, userProfiles]) {
     if (result.error) throw new Error(result.error.message);
   }
+
+  const mappedUserProfiles = (userProfiles.data ?? []).map((profile: DbRow) => ({
+    ...profile,
+    role_code: profile.technician_code ? "technician" : null,
+  }));
 
   return {
     companies: companies.data ?? [],
@@ -89,16 +94,13 @@ async function loadSnapshot(supabase: SupabaseClient): Promise<Snapshot> {
     workOrders: workOrders.data ?? [],
     assignments: (assignments.data ?? []).map((assignment: DbRow) => ({
       ...assignment,
-      technician_code: Array.isArray(assignment.user_profiles) ? assignment.user_profiles[0]?.technician_code : assignment.user_profiles?.technician_code,
-      technician_name: Array.isArray(assignment.user_profiles) ? assignment.user_profiles[0]?.full_name : assignment.user_profiles?.full_name,
+      technician_code: mappedUserProfiles.find((profile: DbRow) => profile.user_id === assignment.user_id)?.technician_code,
+      technician_name: mappedUserProfiles.find((profile: DbRow) => profile.user_id === assignment.user_id)?.full_name,
     })),
     reports: reports.data ?? [],
     materials: materials.data ?? [],
     attachments: attachments.data ?? [],
-    userProfiles: (userProfiles.data ?? []).map((profile: DbRow) => ({
-      ...profile,
-      role_code: Array.isArray(profile.roles) ? profile.roles[0]?.code : profile.roles?.code,
-    })),
+    userProfiles: mappedUserProfiles,
   };
 }
 
@@ -447,14 +449,24 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
   const existing = await supabase.from("work_reports").select("id").eq("work_order_id", workOrderId).maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
   if (existing.data?.id) return existing.data.id as string;
-  const assignment = await supabase.from("work_order_assignments").select("scheduled_start, scheduled_end, user_profiles!inner(technician_code)").eq("work_order_id", workOrderId).limit(1).maybeSingle();
+  const assignment = await supabase.from("work_order_assignments").select("scheduled_start, scheduled_end, user_id").eq("work_order_id", workOrderId).limit(1).maybeSingle();
   if (assignment.error) throw new Error(assignment.error.message);
   const assignmentData = (assignment.data ?? {}) as {
     scheduled_start?: string;
     scheduled_end?: string;
-    user_profiles?: { technician_code?: string } | Array<{ technician_code?: string }>;
+    user_id?: string;
   };
-  const technicianCode = Array.isArray(assignmentData.user_profiles) ? assignmentData.user_profiles[0]?.technician_code : assignmentData.user_profiles?.technician_code;
+  let technicianCode = user.technicianId ?? "tecnico1";
+  if (assignmentData.user_id) {
+    const technicianProfile = await supabase
+      .from("user_profiles")
+      .select("technician_code")
+      .eq("user_id", assignmentData.user_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (technicianProfile.error) throw new Error(technicianProfile.error.message);
+    technicianCode = technicianProfile.data?.technician_code ?? technicianCode;
+  }
   const number = await nextSequentialNumber(supabase, "work_reports", "PARTE");
   const report = await supabase.from("work_reports").insert({ number, work_order_id: workOrderId, technician_user_id: user.userId, technician_code: technicianCode ?? user.technicianId ?? "tecnico1", status: "draft", arrival_time: (assignmentData.scheduled_start ?? "08:00").slice(11, 16), departure_time: (assignmentData.scheduled_end ?? "09:00").slice(11, 16), work_done: "", pending_actions: "", client_name_signed: "" }).select("id").single();
   if (report.error) throw new Error(report.error.message);
