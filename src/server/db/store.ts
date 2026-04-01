@@ -3,6 +3,7 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 
 import { createSeedDatabase } from "@/server/db/seed";
 import type { DatabaseState } from "@/server/db/types";
@@ -10,9 +11,14 @@ import type { DatabaseState } from "@/server/db/types";
 let writeQueue = Promise.resolve();
 
 function resolveDbPath() {
+  const runtimeRoot =
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+      ? path.join(os.tmpdir(), "tecnoglobal-fsm")
+      : path.join(/* turbopackIgnore: true */ process.cwd(), "data");
+
   return process.env.TECNOGLOBAL_DB_FILE
     ? path.resolve(process.env.TECNOGLOBAL_DB_FILE)
-    : path.join(/* turbopackIgnore: true */ process.cwd(), "data", "runtime-db.json");
+    : path.join(runtimeRoot, "runtime-db.json");
 }
 
 async function ensureDbFile() {
