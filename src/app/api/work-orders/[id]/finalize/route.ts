@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireApiUser } from "@/server/http/auth";
-import { finalizeWorkOrder } from "@/server/services/product-service";
+import { finalizeWorkOrder } from "@/server/services/product-service-runtime";
 
 export async function POST(
   request: Request,

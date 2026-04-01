@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireApiUser } from "@/server/http/auth";
-import { createClient, listClients } from "@/server/services/product-service";
+import { createClient, listClients } from "@/server/services/product-service-runtime";
 
 export async function GET() {
   const clients = await listClients();

@@ -1,16 +1,17 @@
-import { cookies } from "next/headers";
-
-import { AUTH_COOKIE_NAME } from "@/lib/auth/session";
-import { getAuthenticatedUserByToken } from "@/server/services/auth-service";
+import { getAppSession } from "@/lib/auth/session";
 
 export async function requireApiUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  const user = await getAuthenticatedUserByToken(token);
+  const session = await getAppSession();
 
-  if (!user) {
+  if (!session) {
     throw new Error("UNAUTHORIZED");
   }
 
-  return user;
+  return {
+    userId: session.userId,
+    email: session.email,
+    fullName: session.fullName,
+    role: session.role,
+    technicianId: session.technicianId,
+  };
 }

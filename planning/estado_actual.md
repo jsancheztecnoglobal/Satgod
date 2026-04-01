@@ -142,8 +142,20 @@ La aplicacion ya no se apoya en datos demo para el flujo principal. Ahora funcio
 
 - borrado de adjuntos desde UI
 - auditoria visible en UI
-- integracion con Supabase o PostgreSQL externo
 - rutas avanzadas con trafico o posicion GPS real de tecnico
+
+## Integracion Supabase
+
+- auth y sesion ya preparados para `Supabase Auth` con SSR y middleware
+- capa runtime de datos ya preparada para usar Supabase cuando existan:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- migracion puente creada en `supabase/migrations/20260401143000_runtime_bridge.sql`
+- seed ampliado con cuentas base en `supabase/seed.sql`
+- login preparado para autoprovisionar cuentas de arranque en Supabase con password comun
+- pendiente externo imprescindible para activar Supabase de verdad:
+  - ejecutar migraciones y seed en el proyecto Supabase
+  - desactivar confirmacion obligatoria de email o confirmar manualmente los usuarios bootstrap
 
 ### Importante
 

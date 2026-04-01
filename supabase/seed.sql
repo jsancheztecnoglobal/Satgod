@@ -37,3 +37,25 @@ set
   family = excluded.family,
   default_cost = excluded.default_cost,
   default_price = excluded.default_price;
+
+insert into public.bootstrap_accounts (email, full_name, role_code, technician_code)
+values
+  ('admin@tecnoglobal.local', 'Administrador Tecnoglobal', 'admin', null),
+  ('oficina@tecnoglobal.local', 'Oficina Planificacion', 'office_planner', null),
+  ('ingenieria@tecnoglobal.local', 'Ingenieria Tecnoglobal', 'engineer', null),
+  ('comercial@tecnoglobal.local', 'Comercial Tecnoglobal', 'sales', null),
+  ('gerencia@tecnoglobal.local', 'Gerencia Tecnoglobal', 'management_readonly', null),
+  ('tecnico1@tecnoglobal.local', 'Tecnico 1', 'technician', 'tecnico1'),
+  ('tecnico2@tecnoglobal.local', 'Tecnico 2', 'technician', 'tecnico2'),
+  ('tecnico3@tecnoglobal.local', 'Tecnico 3', 'technician', 'tecnico3'),
+  ('tecnico4@tecnoglobal.local', 'Tecnico 4', 'technician', 'tecnico4'),
+  ('tecnico5@tecnoglobal.local', 'Tecnico 5', 'technician', 'tecnico5'),
+  ('tecnico6@tecnoglobal.local', 'Tecnico 6', 'technician', 'tecnico6'),
+  ('tecnico7@tecnoglobal.local', 'Tecnico 7', 'technician', 'tecnico7'),
+  ('tecnico8@tecnoglobal.local', 'Tecnico 8', 'technician', 'tecnico8')
+on conflict (email) do update
+set
+  full_name = excluded.full_name,
+  role_code = excluded.role_code,
+  technician_code = excluded.technician_code,
+  active = true;

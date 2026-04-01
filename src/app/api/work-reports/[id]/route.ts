@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireApiUser } from "@/server/http/auth";
-import { getWorkReportDetail, updateWorkReport } from "@/server/services/product-service";
+import { getWorkReportDetail, updateWorkReport } from "@/server/services/product-service-runtime";
 
 export async function GET(
   _request: Request,

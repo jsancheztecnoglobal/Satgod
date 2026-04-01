@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireApiUser } from "@/server/http/auth";
-import { createWorkOrder, listWorkOrders } from "@/server/services/product-service";
+import { createWorkOrder, listWorkOrders } from "@/server/services/product-service-runtime";
 
 export async function GET() {
   const workOrders = await listWorkOrders();

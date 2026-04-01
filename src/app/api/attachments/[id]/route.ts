@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAttachmentBinary } from "@/server/services/product-service";
+import { getAttachmentBinary } from "@/server/services/product-service-runtime";
 
 export async function GET(
   _request: Request,

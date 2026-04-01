@@ -15,8 +15,7 @@ import {
   listTechnicians,
   listWorkOrders,
   listWorkReports,
-} from "@/server/services/product-service";
-
+} from "@/server/services/product-service-runtime";
 export const getClientsList = listClients;
 export const getEquipmentList = listEquipment;
 export const getTechniciansList = listTechnicians;

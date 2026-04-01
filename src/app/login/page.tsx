@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { Bell, CalendarDays, ClipboardCheck, ShieldCheck, Users, Wrench } from "lucide-react";
 
 import { getAppSession } from "@/lib/auth/session";
-import { listLoginUsers } from "@/server/services/auth-service";
 
 export default async function LoginPage({
   searchParams,
@@ -16,7 +15,6 @@ export default async function LoginPage({
   }
 
   const { error } = await searchParams;
-  const loginUsers = await listLoginUsers();
 
   return (
     <div className="min-h-screen bg-[#e9f0f7]">
@@ -61,9 +59,9 @@ export default async function LoginPage({
 
           <div className="border-t border-white/10 px-8 py-8">
             <div className="grid gap-3">
-              <MiniStat label="Tecnicos" value="08" />
-              <MiniStat label="Backend" value="Persistente" />
-              <MiniStat label="Mapa" value="Google Maps" />
+              <MiniStat label="Acceso" value="Seguro" />
+              <MiniStat label="Sesion" value="Persistente" />
+              <MiniStat label="Operacion" value="Tecnoglobal" />
             </div>
           </div>
         </aside>
@@ -79,7 +77,7 @@ export default async function LoginPage({
                   Entrar en Tecnoglobal FSM
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
-                  Login real contra backend local persistente con sesion y control de acceso por rol.
+                  Login real con sesion persistente, permisos por rol y acceso estable para Vercel.
                 </p>
               </div>
               <div className="hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)] md:flex">
@@ -95,7 +93,7 @@ export default async function LoginPage({
                 </p>
                 <h3 className="mt-2 text-2xl font-semibold text-[#1d3557]">Login principal</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Autenticacion real contra el backend de la aplicacion.
+                  Autenticacion real contra Supabase Auth cuando esta configurado.
                 </p>
 
                 {error ? (
@@ -156,26 +154,17 @@ export default async function LoginPage({
 
               <section className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fafe_100%)] p-6 shadow-[0_16px_42px_rgba(15,23,42,0.08)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#52729b]">
-                  Usuarios de prueba
+                  Entorno
                 </p>
-                <h3 className="mt-2 text-2xl font-semibold text-[#1d3557]">Credenciales disponibles</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-[#1d3557]">Acceso corporativo</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Todas las cuentas de arranque usan la contrasena comun <span className="font-semibold">tecnoglobal123</span>.
+                  La autenticacion se resuelve contra el entorno activo de la aplicacion. Si el acceso falla, el sistema mostrara el motivo exacto en esta misma pantalla.
                 </p>
 
                 <div className="mt-6 grid gap-3">
-                  {loginUsers.map((user) => (
-                    <div
-                      key={user.email}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-4"
-                    >
-                      <p className="font-semibold text-[#1d3557]">{user.fullName}</p>
-                      <p className="mt-1 text-sm text-slate-500">{user.email}</p>
-                      <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2f7ed8]">
-                        {user.role}
-                      </p>
-                    </div>
-                  ))}
+                  <SecurityRow title="Roles" description="Acceso segmentado para oficina, tecnicos, ingenieria y administracion." />
+                  <SecurityRow title="Sesion" description="Persistencia segura y proteccion de rutas privadas." />
+                  <SecurityRow title="Datos" description="Operativa conectada a base de datos y backend reales." />
                 </div>
               </section>
             </div>
@@ -233,6 +222,21 @@ function UtilityCard({
       </div>
       <p className="mt-4 font-semibold text-[#1d3557]">{title}</p>
       <p className="mt-1 text-sm text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function SecurityRow({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+      <p className="font-semibold text-[#1d3557]">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
     </div>
   );
 }
