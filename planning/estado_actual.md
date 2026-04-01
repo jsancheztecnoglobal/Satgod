@@ -112,6 +112,16 @@ La aplicacion ya no se apoya en datos demo para el flujo principal. Ahora funcio
 - `npm run lint` OK
 - `npm run build` OK
 
+## Norma operativa de verificacion
+
+Esta norma queda fijada para el resto del proyecto:
+
+- siempre revisar `git` antes y despues de un cambio relevante
+- siempre comprobar `GitHub` tras cada push importante para confirmar que el commit correcto ha llegado a `main`
+- siempre revisar `Vercel` tras cambios que afecten a UI, autenticacion, rutas, variables o backend server-side
+- siempre revisar `Supabase` cuando el cambio toque auth, sesiones, RLS, tablas, seeds, datos o comportamiento de produccion
+- no dar nunca un cambio por bueno solo porque funcione en local; hay que contrastar tambien el estado desplegado y el estado de base de datos si aplica
+
 ## Flujos cubiertos por test
 
 - login correcto

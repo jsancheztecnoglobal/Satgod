@@ -1,19 +1,10 @@
-import { redirect } from "next/navigation";
 import { Bell, Wrench } from "lucide-react";
-
-import { getAppSession } from "@/lib/auth/session";
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const session = await getAppSession();
-
-  if (session) {
-    redirect("/dashboard");
-  }
-
   const { error } = await searchParams;
 
   return (
