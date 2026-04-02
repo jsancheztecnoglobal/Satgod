@@ -35,12 +35,54 @@ export const bootstrapAccounts: BootstrapAccount[] = [
     fullName: "Gerencia Tecnoglobal",
     role: "management_readonly",
   },
-  ...Array.from({ length: 8 }, (_, index) => ({
-    email: `tecnico${index + 1}@tecnoglobal.local`,
-    fullName: `Tecnico ${index + 1}`,
-    role: "technician" as const,
-    technicianCode: `tecnico${index + 1}`,
-  })),
+  {
+    email: "tecnico1@tecnoglobal.local",
+    fullName: "Cristian Hernan Madera",
+    role: "technician",
+    technicianCode: "tecnico1",
+  },
+  {
+    email: "tecnico2@tecnoglobal.local",
+    fullName: "Daniel Esteban Moreno",
+    role: "technician",
+    technicianCode: "tecnico2",
+  },
+  {
+    email: "tecnico3@tecnoglobal.local",
+    fullName: "Pedro Casacuberta",
+    role: "technician",
+    technicianCode: "tecnico3",
+  },
+  {
+    email: "tecnico4@tecnoglobal.local",
+    fullName: "Miquel Puchol",
+    role: "technician",
+    technicianCode: "tecnico4",
+  },
+  {
+    email: "tecnico5@tecnoglobal.local",
+    fullName: "Carlos Gracia",
+    role: "technician",
+    technicianCode: "tecnico5",
+  },
+  {
+    email: "tecnico6@tecnoglobal.local",
+    fullName: "Alfredo Ferreyra",
+    role: "technician",
+    technicianCode: "tecnico6",
+  },
+  {
+    email: "tecnico7@tecnoglobal.local",
+    fullName: "Abel Jimenez",
+    role: "technician",
+    technicianCode: "tecnico7",
+  },
+  {
+    email: "tecnico8@tecnoglobal.local",
+    fullName: "Marco Chillon",
+    role: "technician",
+    technicianCode: "tecnico8",
+  },
 ];
 
 export function findBootstrapAccount(email: string) {

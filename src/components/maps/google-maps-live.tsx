@@ -11,6 +11,13 @@ type MarkerInput = {
   color?: string;
 };
 
+type MapDefaultView = {
+  lat: number;
+  lng: number;
+  zoom: number;
+  description?: string;
+};
+
 type MapsLibrary = {
   Map: new (
     element: HTMLElement,
@@ -96,22 +103,33 @@ export function GoogleMapLive({
   enableRoutes = true,
   title,
   height = 360,
+  defaultView = {
+    lat: 41.8205,
+    lng: 1.86768,
+    zoom: 8,
+    description: "Sin ubicaciones activas. Mostrando la cobertura base en Catalunya.",
+  },
 }: {
   markers: MarkerInput[];
   routeMarkerIds?: string[];
   enableRoutes?: boolean;
   title?: string;
   height?: number;
+  defaultView?: MapDefaultView;
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const routeIds = useMemo(() => routeMarkerIds ?? markers.map((marker) => marker.id), [markers, routeMarkerIds]);
+  const defaultLat = defaultView.lat;
+  const defaultLng = defaultView.lng;
+  const defaultZoom = defaultView.zoom;
+  const defaultDescription = defaultView.description;
 
   useEffect(() => {
     let mounted = true;
     let directionsRenderer: DirectionsRendererLike | null = null;
 
     async function renderMap() {
-      if (!mapRef.current || !markers.length) return;
+      if (!mapRef.current) return;
       const googleInstance = await loadGoogleMapsScript();
       if (!mounted || !mapRef.current) return;
 
@@ -125,8 +143,10 @@ export function GoogleMapLive({
       const PinElement = markerLibrary?.PinElement;
 
       const map = new Map(mapRef.current, {
-        center: { lat: markers[0].lat, lng: markers[0].lng },
-        zoom: markers.length > 1 ? 6 : 15,
+        center: markers.length
+          ? { lat: markers[0].lat, lng: markers[0].lng }
+          : { lat: defaultLat, lng: defaultLng },
+        zoom: markers.length ? (markers.length > 1 ? 6 : 15) : defaultZoom,
         ...(mapId ? { mapId } : {}),
         streetViewControl: false,
         mapTypeControl: false,
@@ -208,7 +228,7 @@ export function GoogleMapLive({
       mounted = false;
       directionsRenderer?.setMap(null);
     };
-  }, [enableRoutes, markers, routeIds]);
+  }, [defaultLat, defaultLng, defaultZoom, enableRoutes, markers, routeIds]);
 
   if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
@@ -221,24 +241,17 @@ export function GoogleMapLive({
     );
   }
 
-  if (!markers.length) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-        <p className="font-semibold text-[#1d3557]">{title ?? "Google Maps"}</p>
-        <p className="mt-2 text-sm text-slate-500">No hay ubicaciones disponibles para mostrar.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
       {title ? (
         <div className="border-b border-slate-200 px-4 py-3">
           <p className="font-semibold text-[#1d3557]">{title}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
-              ? "Marcadores avanzados y rutas calculadas con Google Maps JS."
-              : "Mapa y marcadores basicos activos. Anade Map ID si quieres marcadores avanzados."}
+            {markers.length
+              ? process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
+                ? "Marcadores avanzados y rutas calculadas con Google Maps JS."
+                : "Mapa y marcadores basicos activos. Anade Map ID si quieres marcadores avanzados."
+              : defaultDescription}
           </p>
         </div>
       ) : null}

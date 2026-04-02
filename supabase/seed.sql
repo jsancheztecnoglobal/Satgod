@@ -45,14 +45,14 @@ values
   ('ingenieria@tecnoglobal.local', 'Ingenieria Tecnoglobal', 'engineer', null),
   ('comercial@tecnoglobal.local', 'Comercial Tecnoglobal', 'sales', null),
   ('gerencia@tecnoglobal.local', 'Gerencia Tecnoglobal', 'management_readonly', null),
-  ('tecnico1@tecnoglobal.local', 'Tecnico 1', 'technician', 'tecnico1'),
-  ('tecnico2@tecnoglobal.local', 'Tecnico 2', 'technician', 'tecnico2'),
-  ('tecnico3@tecnoglobal.local', 'Tecnico 3', 'technician', 'tecnico3'),
-  ('tecnico4@tecnoglobal.local', 'Tecnico 4', 'technician', 'tecnico4'),
-  ('tecnico5@tecnoglobal.local', 'Tecnico 5', 'technician', 'tecnico5'),
-  ('tecnico6@tecnoglobal.local', 'Tecnico 6', 'technician', 'tecnico6'),
-  ('tecnico7@tecnoglobal.local', 'Tecnico 7', 'technician', 'tecnico7'),
-  ('tecnico8@tecnoglobal.local', 'Tecnico 8', 'technician', 'tecnico8')
+  ('tecnico1@tecnoglobal.local', 'Cristian Hernan Madera', 'technician', 'tecnico1'),
+  ('tecnico2@tecnoglobal.local', 'Daniel Esteban Moreno', 'technician', 'tecnico2'),
+  ('tecnico3@tecnoglobal.local', 'Pedro Casacuberta', 'technician', 'tecnico3'),
+  ('tecnico4@tecnoglobal.local', 'Miquel Puchol', 'technician', 'tecnico4'),
+  ('tecnico5@tecnoglobal.local', 'Carlos Gracia', 'technician', 'tecnico5'),
+  ('tecnico6@tecnoglobal.local', 'Alfredo Ferreyra', 'technician', 'tecnico6'),
+  ('tecnico7@tecnoglobal.local', 'Abel Jimenez', 'technician', 'tecnico7'),
+  ('tecnico8@tecnoglobal.local', 'Marco Chillon', 'technician', 'tecnico8')
 on conflict (email) do update
 set
   full_name = excluded.full_name,

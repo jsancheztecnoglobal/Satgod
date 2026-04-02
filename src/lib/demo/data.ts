@@ -12,14 +12,14 @@ import type {
 } from "@/lib/data/contracts";
 
 export const technicians: Technician[] = [
-  { id: "tecnico1", code: "tecnico1", name: "Tecnico 1", color: "#2563eb", active: true },
-  { id: "tecnico2", code: "tecnico2", name: "Tecnico 2", color: "#16a34a", active: true },
-  { id: "tecnico3", code: "tecnico3", name: "Tecnico 3", color: "#ea580c", active: true },
-  { id: "tecnico4", code: "tecnico4", name: "Tecnico 4", color: "#9333ea", active: true },
-  { id: "tecnico5", code: "tecnico5", name: "Tecnico 5", color: "#db2777", active: true },
-  { id: "tecnico6", code: "tecnico6", name: "Tecnico 6", color: "#0891b2", active: true },
-  { id: "tecnico7", code: "tecnico7", name: "Tecnico 7", color: "#65a30d", active: true },
-  { id: "tecnico8", code: "tecnico8", name: "Tecnico 8", color: "#dc2626", active: true },
+  { id: "tecnico1", code: "tecnico1", name: "Cristian Hernan Madera", color: "#2563eb", active: true },
+  { id: "tecnico2", code: "tecnico2", name: "Daniel Esteban Moreno", color: "#16a34a", active: true },
+  { id: "tecnico3", code: "tecnico3", name: "Pedro Casacuberta", color: "#ea580c", active: true },
+  { id: "tecnico4", code: "tecnico4", name: "Miquel Puchol", color: "#9333ea", active: true },
+  { id: "tecnico5", code: "tecnico5", name: "Carlos Gracia", color: "#db2777", active: true },
+  { id: "tecnico6", code: "tecnico6", name: "Alfredo Ferreyra", color: "#0891b2", active: true },
+  { id: "tecnico7", code: "tecnico7", name: "Abel Jimenez", color: "#65a30d", active: true },
+  { id: "tecnico8", code: "tecnico8", name: "Marco Chillon", color: "#dc2626", active: true },
 ];
 
 export const clients: ClientRecord[] = [

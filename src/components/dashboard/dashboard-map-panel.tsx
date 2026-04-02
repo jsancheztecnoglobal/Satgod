@@ -97,6 +97,12 @@ export function DashboardMapPanel({
         markers={visibleMarkers}
         enableRoutes={false}
         height={320}
+        defaultView={{
+          lat: 41.8205,
+          lng: 1.86768,
+          zoom: 8,
+          description: "Sin tecnicos ni ordenes geolocalizados ahora mismo. Mostrando Catalunya como area operativa base.",
+        }}
       />
     </div>
   );

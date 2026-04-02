@@ -35,10 +35,10 @@ export function createSeedDatabase(): DatabaseState {
 
   const userAdmin = createUser("admin@tecnoglobal.local", "Administrador Tecnoglobal", "admin");
   const userOffice = createUser("oficina@tecnoglobal.local", "Oficina Planificacion", "office_planner");
-  const userTech1 = createUser("tecnico1@tecnoglobal.local", "Tecnico 1", "technician", {
+  const userTech1 = createUser("tecnico1@tecnoglobal.local", "Cristian Hernan Madera", "technician", {
     technicianId: tecnico1Id,
   });
-  const userTech2 = createUser("tecnico2@tecnoglobal.local", "Tecnico 2", "technician", {
+  const userTech2 = createUser("tecnico2@tecnoglobal.local", "Daniel Esteban Moreno", "technician", {
     technicianId: tecnico2Id,
   });
   const userEngineer = createUser("ingenieria@tecnoglobal.local", "Ingenieria Tecnoglobal", "engineer");
