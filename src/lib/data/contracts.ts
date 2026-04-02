@@ -43,6 +43,9 @@ export type WorkOrderStatus = (typeof workOrderStatuses)[number];
 export const billingStatuses = ["not_ready", "billable", "invoiced", "exported"] as const;
 export type BillingStatus = (typeof billingStatuses)[number];
 
+export const workReportStatuses = ["draft", "ready_for_review", "closed"] as const;
+export type WorkReportStatus = (typeof workReportStatuses)[number];
+
 export const syncStatuses = [
   "synced",
   "pending_sync",
@@ -131,6 +134,13 @@ export interface MaterialUsage {
   unit: string;
 }
 
+export interface MaterialCatalogItem {
+  id: string;
+  sku: string;
+  name: string;
+  unit: string;
+}
+
 export interface ReportAttachment {
   id: string;
   fileName: string;
@@ -163,7 +173,7 @@ export interface WorkReport {
   clientName: string;
   equipmentLabel?: string;
   technicianId: string;
-  status: "draft" | "ready_for_review" | "closed";
+  status: WorkReportStatus;
   arrivalTime: string;
   departureTime: string;
   workDone: string;

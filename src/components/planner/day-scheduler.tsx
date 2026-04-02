@@ -3,10 +3,23 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CalendarDays, Clock3, Users } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useRouter } from "next/navigation";
 
 import { AdjustDurationForm } from "@/components/actions/adjust-duration-form";
 import { OpenReportButton } from "@/components/actions/open-report-button";
 import { ReassignWorkOrderForm } from "@/components/actions/reassign-work-order-form";
+import { useUiDevice } from "@/components/layout/ui-device-context";
 import { RoutePlannerPanel } from "@/components/planner/route-planner-panel";
 import { Panel } from "@/components/ui/panel";
 import type { PlannerEvent, Technician } from "@/lib/data/contracts";
@@ -21,14 +34,21 @@ const HOURS = Array.from({ length: TOTAL_HOURS + 1 }, (_, index) => START_HOUR +
 export function DayScheduler({
   technicians,
   events,
+  canEditSchedule,
 }: {
   technicians: Technician[];
   events: PlannerEvent[];
+  canEditSchedule: boolean;
 }) {
+  const router = useRouter();
+  const { isMobile } = useUiDevice();
   const [scope, setScope] = useState<"day" | "week">("day");
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedView, setSelectedView] = useState<"general" | string>("general");
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
+  const [scheduleError, setScheduleError] = useState("");
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const allowDrag = canEditSchedule && !isMobile;
 
   const visibleTechnicians =
     selectedView === "general"
@@ -53,6 +73,67 @@ export function DayScheduler({
     : "Sin fecha";
   const referenceWeekLabel = formatPlannerWeekRange(visibleEvents, weekOffset);
 
+  const handleScheduleUpdate = async (
+    eventToUpdate: PlannerEvent,
+    nextTechnicianId: string,
+    nextStartAt: string,
+    nextEndAt: string,
+  ) => {
+    const response = await fetch(`/api/work-orders/${eventToUpdate.workOrderId}/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        technicianId: nextTechnicianId,
+        startAt: nextStartAt,
+        endAt: nextEndAt,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { message?: string };
+      throw new Error(payload.message ?? "No se pudo actualizar la planificacion.");
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over, delta } = event;
+    if (!over) return;
+
+    const draggedEvent = events.find((entry) => entry.id === String(active.id));
+    if (!draggedEvent) return;
+
+    const overId = String(over.id);
+    const targetEvent = events.find((entry) => entry.id === overId);
+    const nextTechnicianId =
+      overId.startsWith("column:")
+        ? overId.replace("column:", "")
+        : targetEvent?.technicianId ?? draggedEvent.technicianId;
+
+    const minuteDelta = Math.round(delta.y / (HOUR_HEIGHT / 2)) * 30;
+    const startDate = new Date(draggedEvent.startAt);
+    const endDate = new Date(draggedEvent.endAt);
+    const nextStartDate = new Date(startDate.getTime() + minuteDelta * 60_000);
+    const nextEndDate = new Date(endDate.getTime() + minuteDelta * 60_000);
+
+    setScheduleError("");
+
+    try {
+      await handleScheduleUpdate(
+        draggedEvent,
+        nextTechnicianId,
+        nextStartDate.toISOString(),
+        nextEndDate.toISOString(),
+      );
+      router.refresh();
+    } catch (saveError) {
+      setScheduleError(
+        saveError instanceof Error
+          ? saveError.message
+          : "No se pudo actualizar la planificacion.",
+      );
+    }
+  };
+
   return (
     <div className="space-y-5">
       <Panel className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -62,6 +143,15 @@ export function DayScheduler({
             Calendario de dia completo, por horas y medias horas, con vista general y vista por
             tecnico.
           </p>
+          {allowDrag ? (
+            <p className="mt-2 text-sm text-[#1f4b7f]">
+              Arrastra bloques en vista diaria para mover hora o reasignar tecnico.
+            </p>
+          ) : canEditSchedule ? (
+            <p className="mt-2 text-sm text-[#1f4b7f]">
+              En movil priorizamos lectura y ajuste explicito del horario en lugar de drag.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -119,7 +209,7 @@ export function DayScheduler({
       </Panel>
 
       {scope === "week" ? (
-        <Panel className="flex items-center justify-between gap-4">
+        <Panel className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => setWeekOffset((current) => current - 1)}
@@ -139,6 +229,8 @@ export function DayScheduler({
           </button>
         </Panel>
       ) : null}
+
+      {scheduleError ? <p className="text-sm text-rose-600">{scheduleError}</p> : null}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <SummaryCard
@@ -186,44 +278,55 @@ export function DayScheduler({
           </div>
 
           {scope === "day" ? (
-            <div className="overflow-x-auto bg-[#f7fafe]">
-              <div
-                className="grid min-w-[980px] border-t border-slate-200"
-                style={{
-                  gridTemplateColumns: `84px repeat(${visibleTechnicians.length}, minmax(220px, 1fr))`,
-                }}
-              >
-                <div className="border-r border-slate-200 bg-white" />
-                {visibleTechnicians.map((technician) => (
-                  <div
-                    key={technician.id}
-                    className="border-r border-slate-200 bg-white px-4 py-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="h-3.5 w-3.5 rounded-full"
-                        style={{ backgroundColor: technician.color }}
-                      />
-                      <div>
-                        <p className="font-semibold text-[#1d3557]">{technician.name}</p>
-                        <p className="text-sm text-slate-500">{technician.code}</p>
+            isMobile ? (
+              <MobileDayAgenda events={visibleEvents} technicians={technicians} onSelectEvent={setSelectedEventId} />
+            ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={allowDrag ? handleDragEnd : undefined}
+            >
+              <div className="overflow-x-auto bg-[#f7fafe]">
+                <div
+                  className="grid min-w-[980px] border-t border-slate-200"
+                  style={{
+                    gridTemplateColumns: `84px repeat(${visibleTechnicians.length}, minmax(220px, 1fr))`,
+                  }}
+                >
+                  <div className="border-r border-slate-200 bg-white" />
+                  {visibleTechnicians.map((technician) => (
+                    <div
+                      key={technician.id}
+                      className="border-r border-slate-200 bg-white px-4 py-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-3.5 w-3.5 rounded-full"
+                          style={{ backgroundColor: technician.color }}
+                        />
+                        <div>
+                          <p className="font-semibold text-[#1d3557]">{technician.name}</p>
+                          <p className="text-sm text-slate-500">{technician.code}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
 
-                <HourRail />
+                  <HourRail />
 
-                {visibleTechnicians.map((technician) => (
-                  <TechnicianColumn
-                    key={technician.id}
-                    technician={technician}
-                    events={visibleEvents.filter((event) => event.technicianId === technician.id)}
-                    onSelectEvent={setSelectedEventId}
-                  />
-                ))}
+                  {visibleTechnicians.map((technician) => (
+                    <TechnicianColumn
+                      key={technician.id}
+                      technician={technician}
+                      events={visibleEvents.filter((plannerEvent) => plannerEvent.technicianId === technician.id)}
+                      onSelectEvent={setSelectedEventId}
+                      canEditSchedule={allowDrag}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            </DndContext>
+            )
           ) : (
             <WeeklyPlannerGrid
               technicians={visibleTechnicians}
@@ -266,11 +369,15 @@ export function DayScheduler({
                     workOrderId={selectedEvent.workOrderId}
                     technicians={technicians}
                     currentTechnicianId={selectedEvent.technicianId}
+                    plannedStart={selectedEvent.startAt}
+                    plannedEnd={selectedEvent.endAt}
                     buttonClassName="rounded-xl bg-[#2f7ed8] px-4 py-3 text-sm font-semibold text-white"
                   />
                   <AdjustDurationForm
                     workOrderId={selectedEvent.workOrderId}
+                    plannedStart={selectedEvent.startAt}
                     plannedEnd={selectedEvent.endAt}
+                    technicianId={selectedEvent.technicianId}
                     buttonClassName="rounded-xl bg-[#f28b39] px-4 py-3 text-sm font-semibold text-white"
                   />
                   <OpenReportButton
@@ -351,13 +458,20 @@ function TechnicianColumn({
   technician,
   events,
   onSelectEvent,
+  canEditSchedule,
 }: {
   technician: Technician;
   events: PlannerEvent[];
   onSelectEvent: (id: string) => void;
+  canEditSchedule: boolean;
 }) {
+  const { setNodeRef } = useDroppable({
+    id: `column:${technician.id}`,
+  });
+
   return (
     <div
+      ref={setNodeRef}
       className="relative border-r border-slate-200 bg-white"
       style={{
         height: TOTAL_HEIGHT,
@@ -371,29 +485,67 @@ function TechnicianColumn({
         const height = Math.max((event.durationMinutes / 60) * HOUR_HEIGHT, 52);
 
         return (
-          <button
+          <PlannerEventButton
             key={event.id}
-            type="button"
-            onClick={() => onSelectEvent(event.id)}
-            className="absolute left-2 right-2 rounded-xl px-3 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,23,42,0.2)]"
-            style={{
-              top,
-              height,
-              backgroundColor: event.color ?? technician.color,
-            }}
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90">
-              {event.workOrderNumber}
-            </p>
-            <p className="mt-1 text-sm font-semibold leading-5">{event.title}</p>
-            <p className="mt-1 text-xs text-white/85">{event.clientName}</p>
-            <p className="mt-2 text-xs font-medium text-white/90">
-              {formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}
-            </p>
-          </button>
+            event={event}
+            technicianColor={technician.color}
+            top={top}
+            height={height}
+            onSelectEvent={onSelectEvent}
+            canEditSchedule={canEditSchedule}
+          />
         );
       })}
     </div>
+  );
+}
+
+function PlannerEventButton({
+  event,
+  technicianColor,
+  top,
+  height,
+  onSelectEvent,
+  canEditSchedule,
+}: {
+  event: PlannerEvent;
+  technicianColor: string;
+  top: number;
+  height: number;
+  onSelectEvent: (id: string) => void;
+  canEditSchedule: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: event.id,
+    disabled: !canEditSchedule,
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={() => onSelectEvent(event.id)}
+      className="absolute left-2 right-2 rounded-xl px-3 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,23,42,0.2)]"
+      style={{
+        top,
+        height,
+        backgroundColor: event.color ?? technicianColor,
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.8 : 1,
+        cursor: canEditSchedule ? "grab" : "pointer",
+      }}
+      {...listeners}
+      {...attributes}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90">
+        {event.workOrderNumber}
+      </p>
+      <p className="mt-1 text-sm font-semibold leading-5">{event.title}</p>
+      <p className="mt-1 text-xs text-white/85">{event.clientName}</p>
+      <p className="mt-2 text-xs font-medium text-white/90">
+        {formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}
+      </p>
+    </button>
   );
 }
 
@@ -474,6 +626,62 @@ function WeeklyPlannerGrid({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function MobileDayAgenda({
+  technicians,
+  events,
+  onSelectEvent,
+}: {
+  technicians: Technician[];
+  events: PlannerEvent[];
+  onSelectEvent: (id: string) => void;
+}) {
+  const sortedEvents = [...events].sort((left, right) => left.startAt.localeCompare(right.startAt));
+
+  return (
+    <div className="space-y-3 bg-[#f7fafe] p-4">
+      {sortedEvents.length ? (
+        sortedEvents.map((event) => {
+          const technician = technicians.find((item) => item.id === event.technicianId);
+
+          return (
+            <button
+              key={event.id}
+              type="button"
+              onClick={() => onSelectEvent(event.id)}
+              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_8px_18px_rgba(15,23,42,0.06)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
+                    {event.workOrderNumber}
+                  </p>
+                  <p className="mt-1 text-base font-semibold text-[#1d3557]">{event.title}</p>
+                  <p className="mt-1 text-sm text-slate-500">{event.clientName}</p>
+                </div>
+                <span className="rounded-full bg-[#dce9f7] px-3 py-1 text-xs font-semibold text-[#1f4b7f]">
+                  {formatTime(event.startHour, event.startMinute)}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                <span>{formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}</span>
+                <span>/</span>
+                <span>{technician?.name ?? event.technicianId}</span>
+                <span>/</span>
+                <span>{formatStatus(event.status)}</span>
+              </div>
+            </button>
+          );
+        })
+      ) : (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">
+          No hay intervenciones visibles para este dia.
+        </div>
+      )}
     </div>
   );
 }

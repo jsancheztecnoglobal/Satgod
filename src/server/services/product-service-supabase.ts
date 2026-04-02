@@ -8,6 +8,7 @@ import type {
   DashboardAlert,
   DashboardMetric,
   Equipment,
+  MaterialCatalogItem,
   PlannerEvent,
   ReportAttachment,
   Technician,
@@ -53,6 +54,30 @@ function mapAttachment(attachment: DbRow): ReportAttachment {
     url: `/api/attachments/${attachment.id}`,
     createdAt: attachment.created_at,
   };
+}
+
+function mapMaterialCatalogItem(item: DbRow): MaterialCatalogItem {
+  return {
+    id: item.id,
+    sku: item.sku,
+    name: item.name,
+    unit: item.unit,
+  };
+}
+
+function canTechnicianAccessWorkOrder(
+  snapshot: Snapshot,
+  workOrderId: string,
+  user?: AuthenticatedUser | null,
+) {
+  if (!user || user.role !== "technician" || !user.technicianId) {
+    return true;
+  }
+
+  return snapshot.assignments.some(
+    (assignment) =>
+      assignment.work_order_id === workOrderId && assignment.technician_code === user.technicianId,
+  );
 }
 
 async function getSupabaseClient() {
@@ -279,6 +304,13 @@ export async function listTechnicians() {
     })) satisfies Technician[];
 }
 
+export async function listMaterialCatalog() {
+  const supabase = await getSupabaseClient();
+  const result = await supabase.from("material_catalog").select("id, sku, name, unit").eq("active", true).order("name");
+  if (result.error) throw new Error(result.error.message);
+  return (result.data ?? []).map(mapMaterialCatalogItem);
+}
+
 export async function getTechnicianDetail(technicianId: string) {
   const snapshot = await loadSnapshot(await getSupabaseClient());
   const technicians = await listTechnicians();
@@ -296,16 +328,19 @@ export async function getTechnicianDetail(technicianId: string) {
   };
 }
 
-export async function listWorkOrders() {
+export async function listWorkOrders(user?: AuthenticatedUser | null) {
   const snapshot = await loadSnapshot(await getSupabaseClient());
-  return snapshot.workOrders.map((item) => makeWorkOrderSummary(snapshot, item));
+  return snapshot.workOrders
+    .filter((item) => canTechnicianAccessWorkOrder(snapshot, item.id, user))
+    .map((item) => makeWorkOrderSummary(snapshot, item));
 }
 
-export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrderDetail | null> {
+export async function getWorkOrderDetail(workOrderId: string, user?: AuthenticatedUser | null): Promise<WorkOrderDetail | null> {
   const supabase = await getSupabaseClient();
   const snapshot = await loadSnapshot(supabase);
   const workOrder = snapshot.workOrders.find((item) => item.id === workOrderId);
   if (!workOrder) return null;
+  if (!canTechnicianAccessWorkOrder(snapshot, workOrderId, user)) return null;
   const report = snapshot.reports.find((item) => item.work_order_id === workOrderId);
   const statusHistory = await supabase.from("work_order_status_history").select("*").eq("work_order_id", workOrderId).order("changed_at");
   const workLogs = await supabase.from("work_logs").select("*").eq("work_order_id", workOrderId).order("created_at");
@@ -335,16 +370,19 @@ export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrder
   };
 }
 
-export async function listWorkReports() {
+export async function listWorkReports(user?: AuthenticatedUser | null) {
   const snapshot = await loadSnapshot(await getSupabaseClient());
-  return snapshot.reports.map((item) => makeWorkReport(snapshot, item));
+  return snapshot.reports
+    .filter((item) => canTechnicianAccessWorkOrder(snapshot, item.work_order_id, user))
+    .map((item) => makeWorkReport(snapshot, item));
 }
 
-export async function getWorkReportDetail(reportId: string) {
+export async function getWorkReportDetail(reportId: string, user?: AuthenticatedUser | null) {
   const snapshot = await loadSnapshot(await getSupabaseClient());
   const report = snapshot.reports.find((item) => item.id === reportId);
   if (!report) return null;
-  return { report: makeWorkReport(snapshot, report), workOrder: await getWorkOrderDetail(report.work_order_id) };
+  if (!canTechnicianAccessWorkOrder(snapshot, report.work_order_id, user)) return null;
+  return { report: makeWorkReport(snapshot, report), workOrder: await getWorkOrderDetail(report.work_order_id, user) };
 }
 
 export async function listPlannerEvents() {
@@ -474,10 +512,28 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
 }
 
 export async function updateWorkReport(reportId: string, input: Pick<WorkReport, "arrivalTime" | "departureTime" | "workDone" | "pendingActions" | "clientNameSigned"> & { status?: ReportStatus }, user: AuthenticatedUser) {
-  void user;
   const supabase = await getSupabaseClient();
-  const result = await supabase.from("work_reports").update({ arrival_time: input.arrivalTime, departure_time: input.departureTime, work_done: input.workDone, pending_actions: input.pendingActions, client_name_signed: input.clientNameSigned, status: input.status, closed_at: input.status === "closed" ? new Date().toISOString() : null }).eq("id", reportId);
+  const now = new Date().toISOString();
+  const reportRecord = await supabase.from("work_reports").select("id, work_order_id").eq("id", reportId).maybeSingle();
+  if (reportRecord.error) throw new Error(reportRecord.error.message);
+  if (!reportRecord.data) throw new Error("Parte no encontrado.");
+
+  const result = await supabase.from("work_reports").update({ arrival_time: input.arrivalTime, departure_time: input.departureTime, work_done: input.workDone, pending_actions: input.pendingActions, client_name_signed: input.clientNameSigned, status: input.status, closed_at: input.status === "closed" ? now : null }).eq("id", reportId);
   if (result.error) throw new Error(result.error.message);
+
+  if (input.status === "closed") {
+    const workOrderUpdate = await supabase
+      .from("work_orders")
+      .update({ status: "pending_office_review", status_changed_at: now })
+      .eq("id", reportRecord.data.work_order_id)
+      .neq("status", "closed");
+    if (workOrderUpdate.error) throw new Error(workOrderUpdate.error.message);
+
+    const historyInsert = await supabase
+      .from("work_order_status_history")
+      .insert({ work_order_id: reportRecord.data.work_order_id, to_status: "pending_office_review", reason: "Parte cerrado por tecnico", source: "mobile", changed_by: user.userId });
+    if (historyInsert.error) throw new Error(historyInsert.error.message);
+  }
 }
 
 export async function finalizeWorkOrder(workOrderId: string, user: AuthenticatedUser) {
@@ -513,6 +569,38 @@ export async function adjustWorkOrderDuration(workOrderId: string, endAt: string
   if (updateAssignments.error) throw new Error(updateAssignments.error.message);
   const updateOrder = await supabase.from("work_orders").update({ planned_end: endAt, estimated_minutes: estimatedMinutes }).eq("id", workOrderId);
   if (updateOrder.error) throw new Error(updateOrder.error.message);
+}
+
+export async function scheduleWorkOrder(
+  workOrderId: string,
+  input: { startAt: string; endAt: string; technicianId: string },
+  user: AuthenticatedUser,
+) {
+  void user;
+  const supabase = await getSupabaseClient();
+  const technician = await findTechnicianProfile(supabase, input.technicianId);
+  const estimatedMinutes = Math.max(
+    15,
+    Math.round((new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 60000),
+  );
+
+  const updateAssignments = await supabase
+    .from("work_order_assignments")
+    .update({ user_id: technician.user_id, scheduled_start: input.startAt, scheduled_end: input.endAt })
+    .eq("work_order_id", workOrderId);
+  if (updateAssignments.error) throw new Error(updateAssignments.error.message);
+
+  const updateOrder = await supabase
+    .from("work_orders")
+    .update({ planned_start: input.startAt, planned_end: input.endAt, estimated_minutes: estimatedMinutes })
+    .eq("id", workOrderId);
+  if (updateOrder.error) throw new Error(updateOrder.error.message);
+
+  const updateReport = await supabase
+    .from("work_reports")
+    .update({ technician_user_id: technician.user_id, technician_code: technician.technician_code })
+    .eq("work_order_id", workOrderId);
+  if (updateReport.error) throw new Error(updateReport.error.message);
 }
 
 export async function getMapLocationForWorkOrder(workOrderId: string) {
@@ -562,6 +650,41 @@ export async function saveWorkReportSignature(workReportId: string, input: { dat
     if (insertSignature.error) throw new Error(insertSignature.error.message);
   }
   return attachment.data.id as string;
+}
+
+export async function addWorkReportMaterial(
+  workReportId: string,
+  input: { materialId: string; quantity: number },
+  user: AuthenticatedUser,
+) {
+  void user;
+  const quantity = Number(input.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error("Debes indicar una cantidad valida.");
+  }
+
+  const supabase = await getSupabaseClient();
+  const [reportResult, materialResult] = await Promise.all([
+    supabase.from("work_reports").select("id, work_order_id").eq("id", workReportId).maybeSingle(),
+    supabase.from("material_catalog").select("id, sku, name, unit").eq("id", input.materialId).maybeSingle(),
+  ]);
+  if (reportResult.error) throw new Error(reportResult.error.message);
+  if (!reportResult.data) throw new Error("Parte no encontrado.");
+  if (materialResult.error) throw new Error(materialResult.error.message);
+  if (!materialResult.data) throw new Error("Material no encontrado.");
+
+  const insertResult = await supabase.from("material_usage").insert({
+    work_order_id: reportResult.data.work_order_id,
+    work_report_id: workReportId,
+    material_id: input.materialId,
+    user_id: user.userId,
+    quantity,
+    name_snapshot: materialResult.data.name,
+    sku_snapshot: materialResult.data.sku,
+    unit_snapshot: materialResult.data.unit,
+    source: "mobile",
+  });
+  if (insertResult.error) throw new Error(insertResult.error.message);
 }
 
 export async function getAttachmentBinary(attachmentId: string) {

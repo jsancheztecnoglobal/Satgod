@@ -28,24 +28,28 @@ export async function listTechnicians() {
   return (await runtimeModule()).listTechnicians();
 }
 
+export async function listMaterialCatalog() {
+  return (await runtimeModule()).listMaterialCatalog();
+}
+
 export async function getTechnicianDetail(technicianId: string) {
   return (await runtimeModule()).getTechnicianDetail(technicianId);
 }
 
-export async function listWorkOrders() {
-  return (await runtimeModule()).listWorkOrders();
+export async function listWorkOrders(...args: Parameters<(typeof import("@/server/services/product-service"))["listWorkOrders"]>) {
+  return (await runtimeModule()).listWorkOrders(...args);
 }
 
-export async function getWorkOrderDetail(workOrderId: string) {
-  return (await runtimeModule()).getWorkOrderDetail(workOrderId);
+export async function getWorkOrderDetail(...args: Parameters<(typeof import("@/server/services/product-service"))["getWorkOrderDetail"]>) {
+  return (await runtimeModule()).getWorkOrderDetail(...args);
 }
 
-export async function listWorkReports() {
-  return (await runtimeModule()).listWorkReports();
+export async function listWorkReports(...args: Parameters<(typeof import("@/server/services/product-service"))["listWorkReports"]>) {
+  return (await runtimeModule()).listWorkReports(...args);
 }
 
-export async function getWorkReportDetail(reportId: string) {
-  return (await runtimeModule()).getWorkReportDetail(reportId);
+export async function getWorkReportDetail(...args: Parameters<(typeof import("@/server/services/product-service"))["getWorkReportDetail"]>) {
+  return (await runtimeModule()).getWorkReportDetail(...args);
 }
 
 export async function listPlannerEvents() {
@@ -92,6 +96,10 @@ export async function adjustWorkOrderDuration(...args: Parameters<(typeof import
   return (await runtimeModule()).adjustWorkOrderDuration(...args);
 }
 
+export async function scheduleWorkOrder(...args: Parameters<(typeof import("@/server/services/product-service"))["scheduleWorkOrder"]>) {
+  return (await runtimeModule()).scheduleWorkOrder(...args);
+}
+
 export async function getMapLocationForWorkOrder(workOrderId: string) {
   return (await runtimeModule()).getMapLocationForWorkOrder(workOrderId);
 }
@@ -106,6 +114,10 @@ export async function saveWorkReportAttachment(...args: Parameters<(typeof impor
 
 export async function saveWorkReportSignature(...args: Parameters<(typeof import("@/server/services/product-service"))["saveWorkReportSignature"]>) {
   return (await runtimeModule()).saveWorkReportSignature(...args);
+}
+
+export async function addWorkReportMaterial(...args: Parameters<(typeof import("@/server/services/product-service"))["addWorkReportMaterial"]>) {
+  return (await runtimeModule()).addWorkReportMaterial(...args);
 }
 
 export async function getAttachmentBinary(attachmentId: string) {

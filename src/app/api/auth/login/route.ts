@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import type { RoleCode } from "@/lib/data/contracts";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/session";
+import { getDefaultPathForRole } from "@/lib/auth/access";
 import { loginWithPassword } from "@/server/services/auth-service";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
@@ -28,6 +30,7 @@ export async function POST(request: NextRequest) {
       email,
       password,
     });
+    const bootstrapAccount = findBootstrapAccountByEmail(email);
 
     if (loginAttempt.error && canBootstrapAccount(email, password)) {
       try {
@@ -50,7 +53,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (loginAttempt.error) {
-      const bootstrapAccount = findBootstrapAccountByEmail(email);
       const message =
         bootstrapAccount && canBootstrapAccount(email, password)
           ? "No se ha podido abrir la sesion. Revisa que en Supabase este desactivada la confirmacion obligatoria de email o confirma el usuario manualmente."
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const profileCheck = await supabase
       .from("user_profiles")
-      .select("id")
+      .select("id, roles!inner(code)")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -84,7 +86,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = NextResponse.redirect(new URL("/dashboard", request.url));
+    const rolesPayload = (profileCheck.data as { roles?: { code?: string } | Array<{ code?: string }> } | null)?.roles;
+    const roleCode = (
+      bootstrapAccount?.role ??
+      (Array.isArray(rolesPayload)
+        ? rolesPayload[0]?.code
+        : rolesPayload?.code) ??
+      "admin"
+    ) as RoleCode;
+    const response = NextResponse.redirect(new URL(getDefaultPathForRole(roleCode), request.url));
     return applyCookies(response);
   }
 
@@ -96,7 +106,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.redirect(new URL("/dashboard", request.url));
+  const response = NextResponse.redirect(new URL(getDefaultPathForRole(result.user.role), request.url));
   response.cookies.set(AUTH_COOKIE_NAME, result.token, {
     httpOnly: true,
     sameSite: "lax",

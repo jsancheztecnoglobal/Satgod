@@ -112,6 +112,13 @@ export interface MaterialUsageRecordDb {
   unit: string;
 }
 
+export interface MaterialCatalogRecordDb {
+  id: string;
+  sku: string;
+  name: string;
+  unit: string;
+}
+
 export interface AttachmentRecordDb {
   id: string;
   workReportId: string;
@@ -151,6 +158,7 @@ export interface DatabaseState {
   equipment: EquipmentRecordDb[];
   workOrders: WorkOrderRecordDb[];
   workReports: WorkReportRecordDb[];
+  materialCatalog: MaterialCatalogRecordDb[];
   materialUsage: MaterialUsageRecordDb[];
   attachments: AttachmentRecordDb[];
   assignments: AssignmentRecordDb[];

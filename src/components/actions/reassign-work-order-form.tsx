@@ -9,11 +9,15 @@ export function ReassignWorkOrderForm({
   workOrderId,
   technicians,
   currentTechnicianId,
+  plannedStart,
+  plannedEnd,
   buttonClassName,
 }: {
   workOrderId: string;
   technicians: Technician[];
   currentTechnicianId?: string;
+  plannedStart: string;
+  plannedEnd: string;
   buttonClassName?: string;
 }) {
   const [selectedTechnicianId, setSelectedTechnicianId] = useState(currentTechnicianId ?? technicians[0]?.id ?? "");
@@ -44,10 +48,14 @@ export function ReassignWorkOrderForm({
                 setError("Debes seleccionar un tecnico.");
                 return;
               }
-              const response = await fetch(`/api/work-orders/${workOrderId}/reassign`, {
+              const response = await fetch(`/api/work-orders/${workOrderId}/schedule`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ technicianId: selectedTechnicianId }),
+                body: JSON.stringify({
+                  technicianId: selectedTechnicianId,
+                  startAt: plannedStart,
+                  endAt: plannedEnd,
+                }),
               });
               if (!response.ok) {
                 const payload = (await response.json()) as { message?: string };

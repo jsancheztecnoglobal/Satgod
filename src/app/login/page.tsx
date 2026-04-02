@@ -26,17 +26,34 @@ export default async function LoginPage({
           </div>
         </aside>
 
-        <main className="flex min-h-screen items-center justify-center px-6 py-10 lg:px-12">
+        <main className="flex min-h-screen items-start justify-center px-4 py-6 sm:px-6 sm:py-10 lg:items-center lg:px-12">
           <div className="w-full max-w-5xl">
-            <div className="mb-8 flex items-center justify-end">
+            <div className="mb-5 rounded-2xl bg-[linear-gradient(135deg,#173a63_0%,#1f4b7f_100%)] px-5 py-5 text-white shadow-[0_16px_36px_rgba(15,23,42,0.16)] lg:hidden">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                  <Wrench className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
+                    Acceso
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">Tecnoglobal FSM</p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-white/78">
+                El mismo acceso sirve para escritorio y movil. La interfaz se adapta despues segun el dispositivo.
+              </p>
+            </div>
+
+            <div className="mb-6 flex items-center justify-end">
               <div className="hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)] md:flex">
                 <Bell className="h-5 w-5 text-[#1f4b7f]" />
                 <span className="text-sm font-medium text-slate-700">Producto operativo</span>
               </div>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_16px_42px_rgba(15,23,42,0.08)]">
+            <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.08)] sm:p-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#52729b]">
                   Sesion corporativa
                 </p>
@@ -76,14 +93,14 @@ export default async function LoginPage({
 
                   <button
                     type="submit"
-                    className="mt-2 rounded-xl bg-[#1f4b7f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#173a63]"
+                    className="mt-2 w-full rounded-2xl bg-[#1f4b7f] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#173a63]"
                   >
                     Entrar
                   </button>
                 </form>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fafe_100%)] p-6 shadow-[0_16px_42px_rgba(15,23,42,0.08)]">
+              <section className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fafe_100%)] p-5 shadow-[0_16px_42px_rgba(15,23,42,0.08)] sm:p-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#52729b]">
                   Entorno
                 </p>

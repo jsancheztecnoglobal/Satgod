@@ -7,8 +7,9 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const user = await requireApiUser();
   const { id } = await context.params;
-  const report = await getWorkReportDetail(id);
+  const report = await getWorkReportDetail(id, user);
 
   if (!report) {
     return NextResponse.json({ ok: false, message: "Parte no encontrado." }, { status: 404 });

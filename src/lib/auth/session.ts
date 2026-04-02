@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import type { RoleCode } from "@/lib/data/contracts";
-import { canAccessPath } from "@/lib/auth/access";
+import { canAccessPath, getDefaultPathForRole } from "@/lib/auth/access";
 import { getAuthenticatedUserByToken } from "@/server/services/auth-service";
 import { getSupabaseAuthenticatedUser } from "@/server/services/supabase-auth-service";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
@@ -62,7 +62,7 @@ export async function requirePageAccess(pathname: string) {
   }
 
   if (!canAccessPath(session.role, pathname)) {
-    redirect("/dashboard");
+    redirect(getDefaultPathForRole(session.role));
   }
 
   return session;

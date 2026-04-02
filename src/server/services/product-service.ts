@@ -7,6 +7,7 @@ import type {
   DashboardAlert,
   DashboardMetric,
   Equipment,
+  MaterialCatalogItem,
   PlannerEvent,
   ReportAttachment,
   Technician,
@@ -23,6 +24,7 @@ import type {
   AttachmentRecordDb,
   ClientRecordDb,
   EquipmentRecordDb,
+  MaterialCatalogRecordDb,
   ReportStatus,
   WorkOrderRecordDb,
   WorkReportRecordDb,
@@ -179,6 +181,54 @@ function mapAttachment(attachment: AttachmentRecordDb): ReportAttachment {
   };
 }
 
+function mapMaterialCatalogItem(item: MaterialCatalogRecordDb): MaterialCatalogItem {
+  return {
+    id: item.id,
+    sku: item.sku,
+    name: item.name,
+    unit: item.unit,
+  };
+}
+
+function canTechnicianAccessWorkOrder(
+  database: Awaited<ReturnType<typeof readDatabase>>,
+  workOrderId: string,
+  user?: AuthenticatedUser | null,
+) {
+  if (!user || user.role !== "technician" || !user.technicianId) {
+    return true;
+  }
+
+  return database.assignments.some(
+    (assignment) =>
+      assignment.workOrderId === workOrderId && assignment.technicianId === user.technicianId,
+  );
+}
+
+function assertCanAccessWorkOrder(
+  database: Awaited<ReturnType<typeof readDatabase>>,
+  workOrderId: string,
+  user?: AuthenticatedUser | null,
+) {
+  if (!canTechnicianAccessWorkOrder(database, workOrderId, user)) {
+    throw new Error("UNAUTHORIZED");
+  }
+}
+
+function filterWorkOrdersForUser(
+  database: Awaited<ReturnType<typeof readDatabase>>,
+  workOrders: WorkOrderRecordDb[],
+  user?: AuthenticatedUser | null,
+) {
+  if (!user || user.role !== "technician" || !user.technicianId) {
+    return workOrders;
+  }
+
+  return workOrders.filter((workOrder) =>
+    canTechnicianAccessWorkOrder(database, workOrder.id, user),
+  );
+}
+
 export async function listClients() {
   const database = await readDatabase();
 
@@ -253,6 +303,11 @@ export async function listTechnicians() {
   return getTechniciansSeed();
 }
 
+export async function listMaterialCatalog() {
+  const database = await readDatabase();
+  return database.materialCatalog.map(mapMaterialCatalogItem);
+}
+
 export async function getTechnicianDetail(technicianId: string) {
   const database = await readDatabase();
   const technician = getTechniciansSeed().find((item) => item.id === technicianId);
@@ -280,15 +335,21 @@ export async function getTechnicianDetail(technicianId: string) {
   };
 }
 
-export async function listWorkOrders() {
+export async function listWorkOrders(user?: AuthenticatedUser | null) {
   const database = await readDatabase();
-  return database.workOrders.map((item) => mapWorkOrder(database, item));
+  return filterWorkOrdersForUser(database, database.workOrders, user).map((item) =>
+    mapWorkOrder(database, item),
+  );
 }
 
-export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrderDetail | null> {
+export async function getWorkOrderDetail(
+  workOrderId: string,
+  user?: AuthenticatedUser | null,
+): Promise<WorkOrderDetail | null> {
   const database = await readDatabase();
   const workOrder = database.workOrders.find((item) => item.id === workOrderId);
   if (!workOrder) return null;
+  if (!canTechnicianAccessWorkOrder(database, workOrderId, user)) return null;
 
   const report = getReportForWorkOrder(database, workOrder);
   const mapped = mapWorkOrder(database, workOrder);
@@ -344,18 +405,21 @@ export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrder
   };
 }
 
-export async function listWorkReports() {
+export async function listWorkReports(user?: AuthenticatedUser | null) {
   const database = await readDatabase();
-  return database.workReports.map((item) => mapWorkReport(database, item));
+  return database.workReports
+    .filter((item) => canTechnicianAccessWorkOrder(database, item.workOrderId, user))
+    .map((item) => mapWorkReport(database, item));
 }
 
-export async function getWorkReportDetail(reportId: string) {
+export async function getWorkReportDetail(reportId: string, user?: AuthenticatedUser | null) {
   const database = await readDatabase();
   const report = database.workReports.find((item) => item.id === reportId);
   if (!report) return null;
+  if (!canTechnicianAccessWorkOrder(database, report.workOrderId, user)) return null;
   const workReport = mapWorkReport(database, report);
   const workOrder = database.workOrders.find((item) => item.id === report.workOrderId);
-  const workOrderDetail = workOrder ? await getWorkOrderDetail(workOrder.id) : null;
+  const workOrderDetail = workOrder ? await getWorkOrderDetail(workOrder.id, user) : null;
 
   return {
     report: workReport,
@@ -604,6 +668,7 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
     if (workOrder.reportId) {
       return current;
     }
+    assertCanAccessWorkOrder(current, workOrderId, user);
     const assignment = getAssignmentForWorkOrder(current, workOrder);
     const reportId = createId("report");
     const reportNumber = `PARTE-${String(current.counters.workReport).padStart(4, "0")}`;
@@ -665,35 +730,50 @@ export async function updateWorkReport(
   user: AuthenticatedUser,
 ) {
   const now = new Date().toISOString();
-  await updateDatabase((current) => ({
-    ...current,
-    workReports: current.workReports.map((item) =>
-      item.id === reportId
-        ? {
-            ...item,
-            arrivalTime: input.arrivalTime,
-            departureTime: input.departureTime,
-            workDone: input.workDone,
-            pendingActions: input.pendingActions,
-            clientNameSigned: input.clientNameSigned,
-            status: input.status ?? item.status,
-            closedAt: input.status === "closed" ? now : item.closedAt,
-            updatedAt: now,
-          }
-        : item,
-    ),
-    audit: [
-      ...current.audit,
-      {
-        id: createId("audit"),
-        entityType: "work_report",
-        entityId: reportId,
-        action: "update",
-        userId: user.userId,
-        createdAt: now,
-      },
-    ],
-  }));
+  await updateDatabase((current) => {
+    const report = current.workReports.find((item) => item.id === reportId);
+    if (!report) {
+      throw new Error("Parte no encontrado.");
+    }
+    assertCanAccessWorkOrder(current, report.workOrderId, user);
+
+    const nextStatus = input.status ?? report.status;
+
+    return {
+      ...current,
+      workReports: current.workReports.map((item) =>
+        item.id === reportId
+          ? {
+              ...item,
+              arrivalTime: input.arrivalTime,
+              departureTime: input.departureTime,
+              workDone: input.workDone,
+              pendingActions: input.pendingActions,
+              clientNameSigned: input.clientNameSigned,
+              status: nextStatus,
+              closedAt: nextStatus === "closed" ? now : undefined,
+              updatedAt: now,
+            }
+          : item,
+      ),
+      workOrders: current.workOrders.map((item) =>
+        item.id === report.workOrderId && nextStatus === "closed" && item.status !== "closed"
+          ? { ...item, status: "pending_office_review", updatedAt: now }
+          : item,
+      ),
+      audit: [
+        ...current.audit,
+        {
+          id: createId("audit"),
+          entityType: "work_report",
+          entityId: reportId,
+          action: "update",
+          userId: user.userId,
+          createdAt: now,
+        },
+      ],
+    };
+  });
 }
 
 export async function finalizeWorkOrder(workOrderId: string, user: AuthenticatedUser) {
@@ -791,6 +871,66 @@ export async function adjustWorkOrderDuration(workOrderId: string, endAt: string
   }));
 }
 
+export async function scheduleWorkOrder(
+  workOrderId: string,
+  input: { startAt: string; endAt: string; technicianId: string },
+  user: AuthenticatedUser,
+) {
+  const now = new Date().toISOString();
+
+  await updateDatabase((current) => {
+    const workOrder = current.workOrders.find((item) => item.id === workOrderId);
+    if (!workOrder) {
+      throw new Error("Orden no encontrada.");
+    }
+
+    return {
+      ...current,
+      assignments: current.assignments.map((assignment) =>
+        assignment.workOrderId === workOrderId
+          ? {
+              ...assignment,
+              technicianId: input.technicianId,
+              startAt: input.startAt,
+              endAt: input.endAt,
+              updatedAt: now,
+            }
+          : assignment,
+      ),
+      workOrders: current.workOrders.map((item) =>
+        item.id === workOrderId
+          ? {
+              ...item,
+              status: item.status === "draft" ? "planned" : item.status,
+              updatedAt: now,
+            }
+          : item,
+      ),
+      workReports: current.workReports.map((report) =>
+        report.workOrderId === workOrderId
+          ? {
+              ...report,
+              technicianId: input.technicianId,
+              updatedAt: now,
+            }
+          : report,
+      ),
+      audit: [
+        ...current.audit,
+        {
+          id: createId("audit"),
+          entityType: "assignment",
+          entityId: workOrderId,
+          action: "schedule",
+          userId: user.userId,
+          payload: input,
+          createdAt: now,
+        },
+      ],
+    };
+  });
+}
+
 export async function getMapLocationForWorkOrder(workOrderId: string) {
   const database = await readDatabase();
   const workOrder = database.workOrders.find((item) => item.id === workOrderId);
@@ -829,33 +969,41 @@ export async function saveWorkReportAttachment(
   const relativePath = path.join(workReportId, `${attachmentId}.${extension}`);
   await saveBinaryFile(relativePath, input.bytes);
 
-  await updateDatabase((current) => ({
-    ...current,
-    attachments: [
-      ...current.attachments,
-      {
-        id: attachmentId,
-        workReportId,
-        fileName: input.fileName,
-        mimeType: input.mimeType,
-        kind: input.kind,
-        path: relativePath,
-        sizeBytes: input.bytes.byteLength,
-        createdAt: now,
-      },
-    ],
-    audit: [
-      ...current.audit,
-      {
-        id: createId("audit"),
-        entityType: "work_report",
-        entityId: workReportId,
-        action: "attachment_upload",
-        userId: user.userId,
-        createdAt: now,
-      },
-    ],
-  }));
+  await updateDatabase((current) => {
+    const report = current.workReports.find((item) => item.id === workReportId);
+    if (!report) {
+      throw new Error("Parte no encontrado.");
+    }
+    assertCanAccessWorkOrder(current, report.workOrderId, user);
+
+    return {
+      ...current,
+      attachments: [
+        ...current.attachments,
+        {
+          id: attachmentId,
+          workReportId,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          kind: input.kind,
+          path: relativePath,
+          sizeBytes: input.bytes.byteLength,
+          createdAt: now,
+        },
+      ],
+      audit: [
+        ...current.audit,
+        {
+          id: createId("audit"),
+          entityType: "work_report",
+          entityId: workReportId,
+          action: "attachment_upload",
+          userId: user.userId,
+          createdAt: now,
+        },
+      ],
+    };
+  });
 
   return attachmentId;
 }
@@ -884,6 +1032,10 @@ export async function saveWorkReportSignature(
 
   await updateDatabase((current) => {
     const report = current.workReports.find((item) => item.id === workReportId);
+    if (!report) {
+      throw new Error("Parte no encontrado.");
+    }
+    assertCanAccessWorkOrder(current, report.workOrderId, user);
     const previousAttachmentId = report?.signatureAttachmentId;
     const previousAttachment = previousAttachmentId
       ? current.attachments.find((item) => item.id === previousAttachmentId)
@@ -934,6 +1086,60 @@ export async function saveWorkReportSignature(
   });
 
   return attachmentId;
+}
+
+export async function addWorkReportMaterial(
+  workReportId: string,
+  input: { materialId: string; quantity: number },
+  user: AuthenticatedUser,
+) {
+  const now = new Date().toISOString();
+  const quantity = Number(input.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error("Debes indicar una cantidad valida.");
+  }
+
+  const materialUsageId = createId("material");
+
+  await updateDatabase((current) => {
+    const report = current.workReports.find((item) => item.id === workReportId);
+    if (!report) {
+      throw new Error("Parte no encontrado.");
+    }
+    assertCanAccessWorkOrder(current, report.workOrderId, user);
+
+    const material = current.materialCatalog.find((item) => item.id === input.materialId);
+    if (!material) {
+      throw new Error("Material no encontrado.");
+    }
+
+    return {
+      ...current,
+      materialUsage: [
+        ...current.materialUsage,
+        {
+          id: materialUsageId,
+          workReportId,
+          name: material.name,
+          sku: material.sku,
+          quantity,
+          unit: material.unit,
+        },
+      ],
+      audit: [
+        ...current.audit,
+        {
+          id: createId("audit"),
+          entityType: "work_report",
+          entityId: workReportId,
+          action: "material_add",
+          userId: user.userId,
+          payload: { materialId: input.materialId, quantity },
+          createdAt: now,
+        },
+      ],
+    };
+  });
 }
 
 export async function getAttachmentBinary(attachmentId: string) {

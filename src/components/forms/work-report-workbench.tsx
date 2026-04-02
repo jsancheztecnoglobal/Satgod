@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { Panel } from "@/components/ui/panel";
 import type { WorkOrderSummary, WorkReport } from "@/lib/data/contracts";
@@ -16,9 +16,17 @@ export function WorkReportWorkbench({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [activeTab, setActiveTab] = useState<"open" | "closed">("open");
 
   const ordersWithoutReport = workOrders.filter(
     (order) => !initialReports.some((report) => report.workOrderId === order.id),
+  );
+  const visibleReports = useMemo(
+    () =>
+      initialReports.filter((report) =>
+        activeTab === "open" ? report.status !== "closed" : report.status === "closed",
+      ),
+    [activeTab, initialReports],
   );
 
   return (
@@ -30,13 +38,27 @@ export function WorkReportWorkbench({
               <h2 className="text-[18px] font-semibold text-[#1d3557]">Partes existentes</h2>
               <p className="mt-1 text-sm text-slate-500">Cada parte abre su detalle real.</p>
             </div>
-            <span className="rounded-lg bg-[#dce9f7] px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#1f4b7f]">
-              {initialReports.length} partes
-            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("open")}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${activeTab === "open" ? "bg-[#1f4b7f] text-white" : "bg-[#dce9f7] text-[#1f4b7f]"}`}
+              >
+                Abiertos
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("closed")}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${activeTab === "closed" ? "bg-[#1f4b7f] text-white" : "bg-[#dce9f7] text-[#1f4b7f]"}`}
+              >
+                Cerrados
+              </button>
+            </div>
           </div>
         </div>
         <div className="divide-y divide-slate-100">
-          {initialReports.map((report) => (
+          {visibleReports.length ? (
+            visibleReports.map((report) => (
             <Link
               key={report.id}
               href={`/ordenes/${report.id}`}
@@ -47,11 +69,16 @@ export function WorkReportWorkbench({
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-slate-600">{report.technicianId}</span>
                 <span className="rounded-lg bg-[#2f7ed8] px-3 py-1 text-xs font-semibold text-white">
-                  {report.status}
+                  {formatReportStatus(report.status)}
                 </span>
               </div>
             </Link>
-          ))}
+            ))
+          ) : (
+            <div className="px-5 py-4 text-sm text-slate-500">
+              No hay partes en esta vista.
+            </div>
+          )}
         </div>
       </Panel>
 
@@ -97,4 +124,17 @@ export function WorkReportWorkbench({
       </Panel>
     </div>
   );
+}
+
+function formatReportStatus(status: WorkReport["status"]) {
+  switch (status) {
+    case "draft":
+      return "Borrador";
+    case "ready_for_review":
+      return "Listo para revision";
+    case "closed":
+      return "Cerrado";
+    default:
+      return status;
+  }
 }

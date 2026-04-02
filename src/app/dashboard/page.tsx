@@ -2,9 +2,13 @@ import { OperationsDashboard } from "@/components/dashboard/operations-dashboard
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePageAccess } from "@/lib/auth/session";
 import { getDashboardData } from "@/lib/data/repositories";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
-  await requirePageAccess("/dashboard");
+  const session = await requirePageAccess("/dashboard");
+  if (session.role === "technician") {
+    redirect("/tecnico");
+  }
   const { metrics, alerts, workOrders, technicians } = await getDashboardData();
 
   return (
