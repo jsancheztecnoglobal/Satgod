@@ -8,7 +8,6 @@ import {
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { queryPersister } from "@/lib/offline/query-persister";
-import { ServiceWorkerRegistration } from "@/components/layout/service-worker-registration";
 
 export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
   const [queryClient] = useState(
@@ -29,7 +28,6 @@ export function AppProviders({ children }: Readonly<{ children: React.ReactNode 
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: queryPersister }}>
-      <ServiceWorkerRegistration />
       {children}
       <ReactQueryDevtools initialIsOpen={false} />
     </PersistQueryClientProvider>
