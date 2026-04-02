@@ -17,7 +17,7 @@ import { canAccessPath } from "@/lib/auth/access";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/crear", label: "Crear parte", icon: PlusSquare },
+  { href: "/crear", label: "Crear", icon: PlusSquare },
   { href: "/ordenes", label: "Partes", icon: ClipboardCheck },
   { href: "/planificacion", label: "Planificacion", icon: CalendarDays },
   { href: "/clientes", label: "Clientes", icon: Users },
