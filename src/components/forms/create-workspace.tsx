@@ -5,7 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 
 import type { ClientRecord, Equipment, Technician } from "@/lib/data/contracts";
 
-type CreateKind = "client" | "equipment" | "work_order";
+type CreateKind = "client" | "equipment" | "work_report";
 
 export function CreateWorkspace({
   clients,
@@ -17,7 +17,7 @@ export function CreateWorkspace({
   technicians: Technician[];
 }) {
   const router = useRouter();
-  const [activeKind, setActiveKind] = useState<CreateKind>("work_order");
+  const [activeKind, setActiveKind] = useState<CreateKind>("work_report");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string>("");
 
@@ -92,9 +92,9 @@ export function CreateWorkspace({
     });
   };
 
-  const submitWorkOrder = () => {
+  const submitWorkReport = () => {
     startTransition(async () => {
-      const response = await fetch("/api/work-orders", {
+      const orderResponse = await fetch("/api/work-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -103,12 +103,23 @@ export function CreateWorkspace({
           plannedEnd: new Date(orderForm.plannedEnd).toISOString(),
         }),
       });
-      const payload = await response.json();
-      if (response.ok && payload.workOrderId) {
-        router.push(`/trabajos/${payload.workOrderId}`);
+      const orderPayload = await orderResponse.json();
+
+      if (!orderResponse.ok || !orderPayload.workOrderId) {
+        setMessage(orderPayload.message ?? "No se pudo crear el parte.");
+        return;
+      }
+
+      const reportResponse = await fetch(`/api/work-orders/${orderPayload.workOrderId}/report`, {
+        method: "POST",
+      });
+      const reportPayload = await reportResponse.json();
+
+      if (reportResponse.ok && reportPayload.reportId) {
+        router.push(`/ordenes/${reportPayload.reportId}`);
         router.refresh();
       } else {
-        setMessage(payload.message ?? "No se pudo crear la orden.");
+        setMessage(reportPayload.message ?? "Se ha creado el trabajo, pero no se ha podido abrir el parte.");
       }
     });
   };
@@ -116,8 +127,8 @@ export function CreateWorkspace({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2">
-        <TabButton active={activeKind === "work_order"} onClick={() => setActiveKind("work_order")}>
-          Crear orden
+        <TabButton active={activeKind === "work_report"} onClick={() => setActiveKind("work_report")}>
+          Crear parte
         </TabButton>
         <TabButton active={activeKind === "client"} onClick={() => setActiveKind("client")}>
           Crear cliente
@@ -179,9 +190,9 @@ export function CreateWorkspace({
         </div>
       ) : null}
 
-      {activeKind === "work_order" ? (
+      {activeKind === "work_report" ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Titulo" className="md:col-span-2"><input value={orderForm.title} onChange={(event) => setOrderForm({ ...orderForm, title: event.target.value })} className={inputClassName} /></Field>
+          <Field label="Titulo del parte" className="md:col-span-2"><input value={orderForm.title} onChange={(event) => setOrderForm({ ...orderForm, title: event.target.value })} className={inputClassName} /></Field>
           <Field label="Cliente">
             <select value={orderForm.clientId} onChange={(event) => setOrderForm({ ...orderForm, clientId: event.target.value, equipmentId: visibleEquipment[0]?.id ?? "" })} className={inputClassName}>
               {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -225,8 +236,8 @@ export function CreateWorkspace({
             <textarea value={orderForm.description} onChange={(event) => setOrderForm({ ...orderForm, description: event.target.value })} rows={5} className={inputClassName} />
           </Field>
           <div className="md:col-span-2">
-            <button type="button" disabled={pending} onClick={submitWorkOrder} className={primaryButtonClassName}>
-              {pending ? "Guardando..." : "Guardar orden"}
+            <button type="button" disabled={pending} onClick={submitWorkReport} className={primaryButtonClassName}>
+              {pending ? "Guardando..." : "Crear parte"}
             </button>
           </div>
         </div>

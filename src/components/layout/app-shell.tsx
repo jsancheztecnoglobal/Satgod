@@ -17,7 +17,7 @@ import { canAccessPath } from "@/lib/auth/access";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/crear", label: "Crear", icon: PlusSquare },
+  { href: "/crear", label: "Crear parte", icon: PlusSquare },
   { href: "/ordenes", label: "Partes", icon: ClipboardCheck },
   { href: "/planificacion", label: "Planificacion", icon: CalendarDays },
   { href: "/clientes", label: "Clientes", icon: Users },
@@ -42,6 +42,10 @@ export function AppShell({
   const visibleNavItems = session
     ? navItems.filter((item) => canAccessPath(session.role, item.href))
     : [];
+
+  if (!session) {
+    return <div className="min-h-screen bg-[#edf2f8]">{children}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#edf2f8] text-slate-900">

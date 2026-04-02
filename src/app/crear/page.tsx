@@ -16,8 +16,8 @@ export default async function CrearPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Crear"
-        title="Crear entidades operativas"
-        description="Desde aqui se crean clientes, equipos y ordenes. Cada guardado persiste y redirige al detalle real creado."
+        title="Crear parte y maestros operativos"
+        description="Desde aqui puedes dar de alta clientes, equipos y crear un parte completo. Al crear el parte, el trabajo queda planificado y se abre el parte real."
       />
       <Panel>
         <CreateWorkspace clients={clients} equipment={equipment} technicians={technicians} />
