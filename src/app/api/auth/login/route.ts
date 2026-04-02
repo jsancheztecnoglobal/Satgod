@@ -12,6 +12,14 @@ import {
   findBootstrapAccountByEmail,
 } from "@/server/services/supabase-auth-service";
 
+function extractRoleCode(rolePayload: { code?: string } | Array<{ code?: string }> | null | undefined) {
+  if (Array.isArray(rolePayload)) {
+    return rolePayload[0]?.code ?? null;
+  }
+
+  return rolePayload?.code ?? null;
+}
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const email = String(formData.get("email") ?? "");
@@ -72,28 +80,40 @@ export async function POST(request: NextRequest) {
 
     const profileCheck = await supabase
       .from("user_profiles")
-      .select("id, roles!inner(code)")
+      .select("full_name, technician_code, active, role_id, roles(code)")
       .eq("user_id", userId)
+      .is("deleted_at", null)
       .maybeSingle();
 
-    if (profileCheck.error || !profileCheck.data) {
+    let resolvedRoleCode =
+      bootstrapAccount?.role ??
+      (extractRoleCode(
+        (profileCheck.data as { roles?: { code?: string } | Array<{ code?: string }> } | null)?.roles,
+      ) as RoleCode | null);
+
+    if (!resolvedRoleCode && profileCheck.data?.role_id) {
+      const roleCheck = await supabase
+        .from("roles")
+        .select("code")
+        .eq("id", profileCheck.data.role_id)
+        .maybeSingle<{ code: string }>();
+
+      resolvedRoleCode = (roleCheck.data?.code as RoleCode | undefined) ?? null;
+    }
+
+    if (profileCheck.error || !profileCheck.data || !profileCheck.data.active || !resolvedRoleCode) {
       await supabase.auth.signOut();
       return NextResponse.redirect(
         new URL(
-          "/login?error=Falta%20ejecutar%20las%20migraciones%20y%20el%20seed%20de%20Supabase%20para%20crear%20los%20perfiles%20de%20usuario.",
+          `/login?error=${encodeURIComponent(
+            "No se ha encontrado un perfil activo valido para este usuario en Supabase.",
+          )}`,
           request.url,
         ),
       );
     }
 
-    const rolesPayload = (profileCheck.data as { roles?: { code?: string } | Array<{ code?: string }> } | null)?.roles;
-    const roleCode = (
-      bootstrapAccount?.role ??
-      (Array.isArray(rolesPayload)
-        ? rolesPayload[0]?.code
-        : rolesPayload?.code) ??
-      "admin"
-    ) as RoleCode;
+    const roleCode = resolvedRoleCode;
     const response = NextResponse.redirect(new URL(getDefaultPathForRole(roleCode), request.url));
     return applyCookies(response);
   }
