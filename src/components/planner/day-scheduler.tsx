@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Clock3, Users } from "lucide-react";
 import {
   DndContext,
@@ -47,8 +47,13 @@ export function DayScheduler({
   const [selectedView, setSelectedView] = useState<"general" | string>("general");
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
   const [scheduleError, setScheduleError] = useState("");
+  const [localEvents, setLocalEvents] = useState(events);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const allowDrag = canEditSchedule && !isMobile;
+
+  useEffect(() => {
+    setLocalEvents(events);
+  }, [events]);
 
   const visibleTechnicians =
     selectedView === "general"
@@ -57,13 +62,13 @@ export function DayScheduler({
 
   const visibleEvents = useMemo(
     () =>
-      events.filter((event) =>
+      localEvents.filter((event) =>
         selectedView === "general" ? true : event.technicianId === selectedView,
       ),
-    [events, selectedView],
+    [localEvents, selectedView],
   );
 
-  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0];
+  const selectedEvent = localEvents.find((event) => event.id === selectedEventId) ?? localEvents[0];
   const routeTechnicianId =
     selectedView === "general" ? selectedEvent?.technicianId : selectedView;
   const busyTechnicians = new Set(visibleEvents.map((event) => event.technicianId));
@@ -99,11 +104,11 @@ export function DayScheduler({
     const { active, over, delta } = event;
     if (!over) return;
 
-    const draggedEvent = events.find((entry) => entry.id === String(active.id));
+    const draggedEvent = localEvents.find((entry) => entry.id === String(active.id));
     if (!draggedEvent) return;
 
     const overId = String(over.id);
-    const targetEvent = events.find((entry) => entry.id === overId);
+    const targetEvent = localEvents.find((entry) => entry.id === overId);
     const nextTechnicianId =
       overId.startsWith("column:")
         ? overId.replace("column:", "")
@@ -114,8 +119,17 @@ export function DayScheduler({
     const endDate = new Date(draggedEvent.endAt);
     const nextStartDate = new Date(startDate.getTime() + minuteDelta * 60_000);
     const nextEndDate = new Date(endDate.getTime() + minuteDelta * 60_000);
+    const optimisticEvent = rebasePlannerEvent(
+      draggedEvent,
+      nextTechnicianId,
+      nextStartDate,
+      nextEndDate,
+    );
 
     setScheduleError("");
+    setLocalEvents((current) =>
+      current.map((entry) => (entry.id === draggedEvent.id ? optimisticEvent : entry)),
+    );
 
     try {
       await handleScheduleUpdate(
@@ -126,6 +140,7 @@ export function DayScheduler({
       );
       router.refresh();
     } catch (saveError) {
+      setLocalEvents(events);
       setScheduleError(
         saveError instanceof Error
           ? saveError.message
@@ -136,7 +151,7 @@ export function DayScheduler({
 
   return (
     <div className="space-y-5">
-      <Panel className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <Panel className="space-y-4">
         <div>
           <h2 className="text-[20px] font-semibold text-[#1d3557]">Planificacion diaria</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -154,57 +169,72 @@ export function DayScheduler({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setScope("day")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-              scope === "day"
-                ? "bg-[#173a63] text-white"
-                : "bg-white text-slate-700 ring-1 ring-slate-200"
-            }`}
-          >
-            Dia
-          </button>
-          <button
-            type="button"
-            onClick={() => setScope("week")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-              scope === "week"
-                ? "bg-[#173a63] text-white"
-                : "bg-white text-slate-700 ring-1 ring-slate-200"
-            }`}
-          >
-            Semana
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedView("general")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-              selectedView === "general"
-                ? "bg-[#1f4b7f] text-white"
-                : "bg-white text-slate-700 ring-1 ring-slate-200"
-            }`}
-          >
-            General
-          </button>
-          {technicians.map((technician) => (
-            <button
-              key={technician.id}
-              type="button"
-              onClick={() => setSelectedView(technician.id)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                selectedView === technician.id
-                  ? "text-white"
-                  : "bg-white text-slate-700 ring-1 ring-slate-200"
-              }`}
-              style={{
-                backgroundColor: selectedView === technician.id ? technician.color : undefined,
-              }}
-            >
-              {technician.code}
-            </button>
-          ))}
+        <div className="grid gap-4 xl:grid-cols-[auto_1fr] xl:items-end">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
+              Vista
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setScope("day")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  scope === "day"
+                    ? "bg-[#173a63] text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                }`}
+              >
+                Dia
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("week")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  scope === "week"
+                    ? "bg-[#173a63] text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                }`}
+              >
+                Semana
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
+              Tecnicos
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedView("general")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  selectedView === "general"
+                    ? "bg-[#1f4b7f] text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                }`}
+              >
+                General
+              </button>
+              {technicians.map((technician) => (
+                <button
+                  key={technician.id}
+                  type="button"
+                  onClick={() => setSelectedView(technician.id)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                    selectedView === technician.id
+                      ? "text-white"
+                      : "bg-white text-slate-700 ring-1 ring-slate-200"
+                  }`}
+                  style={{
+                    backgroundColor: selectedView === technician.id ? technician.color : undefined,
+                  }}
+                >
+                  {technician.code}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </Panel>
 
@@ -252,8 +282,8 @@ export function DayScheduler({
         <SummaryCard
           icon={<Clock3 className="h-5 w-5" />}
           label="Carga visible"
-          value={`${visibleEvents.reduce((sum, event) => sum + event.durationMinutes, 0)} min`}
-          helper="Suma total de duracion para la vista seleccionada."
+          value={formatDurationHours(visibleEvents.reduce((sum, event) => sum + event.durationMinutes, 0))}
+          helper="Suma total de duracion visible en horas."
         />
       </div>
 
@@ -321,6 +351,7 @@ export function DayScheduler({
                       events={visibleEvents.filter((plannerEvent) => plannerEvent.technicianId === technician.id)}
                       onSelectEvent={setSelectedEventId}
                       canEditSchedule={allowDrag}
+                      selectedEventId={selectedEvent?.id}
                     />
                   ))}
                 </div>
@@ -359,7 +390,7 @@ export function DayScheduler({
                 />
                 <PlanningRow
                   label="Duracion"
-                  value={`${selectedEvent.durationMinutes} minutos`}
+                  value={formatDurationHours(selectedEvent.durationMinutes)}
                 />
                 <PlanningRow label="Estado" value={formatStatus(selectedEvent.status)} />
                 <PlanningRow label="Prioridad" value={formatPriority(selectedEvent.priority)} />
@@ -459,15 +490,18 @@ function TechnicianColumn({
   events,
   onSelectEvent,
   canEditSchedule,
+  selectedEventId,
 }: {
   technician: Technician;
   events: PlannerEvent[];
   onSelectEvent: (id: string) => void;
   canEditSchedule: boolean;
+  selectedEventId?: string;
 }) {
   const { setNodeRef } = useDroppable({
     id: `column:${technician.id}`,
   });
+  const layoutEvents = useMemo(() => buildDayLayoutEvents(events), [events]);
 
   return (
     <div
@@ -479,7 +513,7 @@ function TechnicianColumn({
           "repeating-linear-gradient(to bottom, transparent 0, transparent 38px, rgba(148,163,184,0.14) 38px, rgba(148,163,184,0.14) 39px, transparent 39px, transparent 78px), repeating-linear-gradient(to bottom, rgba(203,213,225,0.7) 0, rgba(203,213,225,0.7) 1px, transparent 1px, transparent 78px)",
       }}
     >
-      {events.map((event) => {
+      {layoutEvents.map((event) => {
         const top =
           (((event.startHour - START_HOUR) * 60 + event.startMinute) / 60) * HOUR_HEIGHT;
         const height = Math.max((event.durationMinutes / 60) * HOUR_HEIGHT, 52);
@@ -493,6 +527,9 @@ function TechnicianColumn({
             height={height}
             onSelectEvent={onSelectEvent}
             canEditSchedule={canEditSchedule}
+            isSelected={selectedEventId === event.id}
+            overlapIndex={event.overlapIndex}
+            overlapCount={event.overlapCount}
           />
         );
       })}
@@ -507,6 +544,9 @@ function PlannerEventButton({
   height,
   onSelectEvent,
   canEditSchedule,
+  isSelected,
+  overlapIndex,
+  overlapCount,
 }: {
   event: PlannerEvent;
   technicianColor: string;
@@ -514,25 +554,37 @@ function PlannerEventButton({
   height: number;
   onSelectEvent: (id: string) => void;
   canEditSchedule: boolean;
+  isSelected: boolean;
+  overlapIndex: number;
+  overlapCount: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: event.id,
     disabled: !canEditSchedule,
   });
+  const columnInset = 8;
+  const overlapOffset = overlapCount > 1 ? 18 : 0;
+  const leftInset = columnInset + overlapIndex * overlapOffset;
+  const rightInset = columnInset + (overlapCount - overlapIndex - 1) * overlapOffset;
 
   return (
     <button
       ref={setNodeRef}
       type="button"
       onClick={() => onSelectEvent(event.id)}
-      className="absolute left-2 right-2 rounded-xl px-3 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,23,42,0.2)]"
+      className={`absolute rounded-xl px-3 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,23,42,0.2)] ${
+        isSelected ? "ring-2 ring-white/80" : ""
+      }`}
       style={{
         top,
         height,
+        left: leftInset,
+        right: rightInset,
         backgroundColor: event.color ?? technicianColor,
         transform: CSS.Translate.toString(transform),
         opacity: isDragging ? 0.8 : 1,
         cursor: canEditSchedule ? "grab" : "pointer",
+        zIndex: isDragging ? 30 : isSelected ? 20 : 10 + overlapIndex,
       }}
       {...listeners}
       {...attributes}
@@ -579,6 +631,9 @@ function WeeklyPlannerGrid({
           const dayEvents = events
             .filter((event) => event.startAt.slice(0, 10) === dayKey)
             .sort((left, right) => left.startAt.localeCompare(right.startAt));
+          const firstEvent = dayEvents[0];
+          const lastEvent = dayEvents[dayEvents.length - 1];
+          const totalDayMinutes = dayEvents.reduce((sum, event) => sum + event.durationMinutes, 0);
 
           return (
             <div key={dayKey} className="min-h-[420px] bg-white">
@@ -589,6 +644,16 @@ function WeeklyPlannerGrid({
                 <p className="mt-1 font-semibold text-[#1d3557]">
                   {date.toLocaleDateString("es-ES")}
                 </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-[#1f4b7f]">
+                    {firstEvent && lastEvent
+                      ? `${formatTime(firstEvent.startHour, firstEvent.startMinute)} - ${formatEndTime(lastEvent)}`
+                      : "Sin horas"}
+                  </span>
+                  <span className="rounded-full bg-[#e8f1fb] px-2.5 py-1 font-semibold text-[#1f4b7f]">
+                    {formatDurationHours(totalDayMinutes)}
+                  </span>
+                </div>
               </div>
               <div className="space-y-3 p-4">
                 {dayEvents.length ? (
@@ -607,7 +672,7 @@ function WeeklyPlannerGrid({
                         </p>
                         <p className="mt-1 text-sm font-semibold">{event.title}</p>
                         <p className="mt-1 text-xs text-white/85">{event.clientName}</p>
-                        <p className="mt-2 text-xs text-white/90">
+                        <p className="mt-2 inline-flex rounded-full bg-white/18 px-2 py-1 text-xs font-semibold text-white/95">
                           {formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}
                         </p>
                         <p className="mt-1 text-xs text-white/90">
@@ -780,4 +845,99 @@ function formatPriority(priority: PlannerEvent["priority"]) {
     default:
       return priority;
   }
+}
+
+type DayLayoutEvent = PlannerEvent & {
+  overlapIndex: number;
+  overlapCount: number;
+};
+
+function buildDayLayoutEvents(events: PlannerEvent[]): DayLayoutEvent[] {
+  const sortedEvents = [...events].sort((left, right) => {
+    if (left.startAt === right.startAt) {
+      return left.endAt.localeCompare(right.endAt);
+    }
+    return left.startAt.localeCompare(right.startAt);
+  });
+
+  const layoutById = new Map<string, { overlapIndex: number; overlapCount: number }>();
+  let active: Array<{ id: string; endAt: string; overlapIndex: number }> = [];
+  let clusterIds: string[] = [];
+  let clusterMaxColumns = 1;
+
+  const flushCluster = () => {
+    clusterIds.forEach((id) => {
+      const current = layoutById.get(id);
+      if (!current) return;
+      layoutById.set(id, { ...current, overlapCount: clusterMaxColumns });
+    });
+    clusterIds = [];
+    clusterMaxColumns = 1;
+  };
+
+  sortedEvents.forEach((event) => {
+    active = active.filter((item) => item.endAt > event.startAt);
+    if (!active.length && clusterIds.length) {
+      flushCluster();
+    }
+
+    let nextIndex = 0;
+    const usedIndexes = new Set(active.map((item) => item.overlapIndex));
+    while (usedIndexes.has(nextIndex)) {
+      nextIndex += 1;
+    }
+
+    active.push({
+      id: event.id,
+      endAt: event.endAt,
+      overlapIndex: nextIndex,
+    });
+    clusterIds.push(event.id);
+    clusterMaxColumns = Math.max(clusterMaxColumns, active.length);
+    layoutById.set(event.id, {
+      overlapIndex: nextIndex,
+      overlapCount: 1,
+    });
+  });
+
+  if (clusterIds.length) {
+    flushCluster();
+  }
+
+  return sortedEvents.map((event) => {
+    const layout = layoutById.get(event.id) ?? { overlapIndex: 0, overlapCount: 1 };
+    return {
+      ...event,
+      overlapIndex: layout.overlapIndex,
+      overlapCount: layout.overlapCount,
+    };
+  });
+}
+
+function rebasePlannerEvent(
+  event: PlannerEvent,
+  technicianId: string,
+  nextStartDate: Date,
+  nextEndDate: Date,
+): PlannerEvent {
+  return {
+    ...event,
+    technicianId,
+    startAt: nextStartDate.toISOString(),
+    endAt: nextEndDate.toISOString(),
+    startHour: nextStartDate.getHours(),
+    startMinute: nextStartDate.getMinutes(),
+    durationMinutes: Math.max(
+      Math.round((nextEndDate.getTime() - nextStartDate.getTime()) / 60_000),
+      30,
+    ),
+  };
+}
+
+function formatDurationHours(minutes: number) {
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) {
+    return `${hours} h`;
+  }
+  return `${hours.toFixed(1).replace(".", ",")} h`;
 }
