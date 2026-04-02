@@ -45,6 +45,7 @@ export type BillingStatus = (typeof billingStatuses)[number];
 
 export const workReportStatuses = ["draft", "ready_for_review", "closed"] as const;
 export type WorkReportStatus = (typeof workReportStatuses)[number];
+export type TechnicianAgendaStatus = WorkOrderStatus | WorkReportStatus;
 
 export const syncStatuses = [
   "synced",
@@ -228,7 +229,9 @@ export interface TechnicianAgendaItem {
   title: string;
   client: string;
   equipmentLabel?: string;
+  notes?: string;
+  reportId?: string;
   windowLabel: string;
-  status: WorkOrderStatus;
+  status: TechnicianAgendaStatus;
   syncStatus: SyncStatus;
 }

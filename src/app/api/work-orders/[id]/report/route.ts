@@ -10,7 +10,13 @@ export async function POST(
   try {
     const user = await requireApiUser();
     const { id } = await context.params;
-    const reportId = await createWorkReportFromWorkOrder(id, user);
+    const body = await request.json().catch(() => ({}));
+    const reportId = await createWorkReportFromWorkOrder(id, user, {
+      arrivalTime: typeof body.arrivalTime === "string" ? body.arrivalTime : undefined,
+      openedAt: typeof body.openedAt === "string" ? body.openedAt : undefined,
+      geoLat: typeof body.geoLat === "number" ? body.geoLat : undefined,
+      geoLng: typeof body.geoLng === "number" ? body.geoLng : undefined,
+    });
     return NextResponse.json({ ok: true, reportId });
   } catch (error) {
     return NextResponse.json(

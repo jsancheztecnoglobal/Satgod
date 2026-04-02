@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AttachmentUploader } from "@/components/forms/attachment-uploader";
@@ -28,85 +27,87 @@ export default async function WorkReportDetailPage({
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-4 md:space-y-6">
       <PageHeader
         eyebrow="Parte"
         title={`${detail.report.workOrderNumber} - ${detail.report.clientName}`}
-        description="Parte operativo listo para trabajar desde movil o escritorio, sin cambiar de flujo."
+        description="Parte operativo para ejecutar la visita, documentarla y devolver el control a la agenda."
       />
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="order-2 space-y-4 xl:order-1">
-          <Panel>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <InfoRow label="OT" value={detail.report.workOrderNumber} />
-              <InfoRow label="Cliente" value={detail.report.clientName} />
-              <InfoRow label="Equipo" value={detail.report.equipmentLabel ?? "Sin equipo"} />
-              <InfoRow label="Tecnico" value={detail.report.technicianId} />
-            </div>
-          </Panel>
+      <Panel>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <InfoRow label="OT" value={detail.report.workOrderNumber} />
+          <InfoRow label="Cliente" value={detail.report.clientName} />
+          <InfoRow label="Equipo" value={detail.report.equipmentLabel ?? "Sin equipo"} />
+          <InfoRow label="Estado" value={formatStatusLabel(detail.report.status)} />
+        </div>
+      </Panel>
 
-          <Panel>
-            <WorkReportDetailForm report={detail.report} />
-          </Panel>
+      {detail.workOrder?.description ? (
+        <Panel className="bg-slate-50">
+          <h2 className="text-[18px] font-semibold text-[#1d3557]">Notas</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{detail.workOrder.description}</p>
+        </Panel>
+      ) : null}
 
-          <Panel>
-            <h2 className="text-[18px] font-semibold text-[#1d3557]">Firma de cliente</h2>
-            <div className="mt-4">
+      {detail.workOrder ? (
+        <LocationSummaryPanel
+          title={`Ubicacion de ${detail.workOrder.clientName}`}
+          address={detail.workOrder.clientAddress}
+          lat={detail.workOrder.lat}
+          lng={detail.workOrder.lng}
+          helper="Abrimos la ubicacion externa sin cargar mapas pesados dentro del parte."
+        />
+      ) : null}
+
+      <Panel>
+        <WorkReportDetailForm
+          report={detail.report}
+          showArrivalTime={false}
+          showClientNameField={false}
+          returnPath={session.role === "technician" ? "/tecnico" : undefined}
+        >
+          <div className="space-y-5 pt-2">
+            <Section title="Firma del cliente">
               <SignatureCapture
                 workReportId={detail.report.id}
                 signerName={detail.report.clientNameSigned}
                 existingSignatureUrl={detail.report.signatureUrl}
               />
-            </div>
-          </Panel>
+            </Section>
 
-          <Panel>
-            <h2 className="text-[18px] font-semibold text-[#1d3557]">Fotos y adjuntos</h2>
-            <div className="mt-4">
-              <AttachmentUploader workReportId={detail.report.id} attachments={detail.report.attachments} />
-            </div>
-          </Panel>
+            <Section title="Fotos y adjuntos">
+              <AttachmentUploader
+                workReportId={detail.report.id}
+                attachments={detail.report.attachments}
+              />
+            </Section>
 
-          <Panel>
-            <h2 className="text-[18px] font-semibold text-[#1d3557]">Materiales usados</h2>
-            <div className="mt-4">
+            <Section title="Materiales usados">
               <MaterialUsageEditor
                 workReportId={detail.report.id}
                 materials={detail.report.materials}
                 catalog={materialCatalog}
               />
-            </div>
-          </Panel>
-        </div>
+            </Section>
+          </div>
+        </WorkReportDetailForm>
+      </Panel>
+    </div>
+  );
+}
 
-        <div className="order-1 space-y-4 xl:order-2">
-          {detail.workOrder ? (
-            <>
-              <Panel className="space-y-3 border-[#dbe7f4] bg-[#f7fafe]">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
-                  Acciones rapidas
-                </p>
-                <Link href={`/trabajos/${detail.workOrder.id}`} className="flex w-full items-center justify-center rounded-2xl bg-[#1f4b7f] px-4 py-3 text-sm font-semibold text-white">
-                  Abrir orden asociada
-                </Link>
-                {detail.workOrder.equipmentId && session.role !== "technician" ? (
-                  <Link href={`/equipos/${detail.workOrder.equipmentId}`} className="flex w-full items-center justify-center rounded-2xl bg-[#2f7ed8] px-4 py-3 text-sm font-semibold text-white">
-                    Abrir equipo
-                  </Link>
-                ) : null}
-              </Panel>
-              <LocationSummaryPanel
-                title={`Ubicacion de ${detail.workOrder.clientName}`}
-                address={detail.workOrder.clientAddress}
-                lat={detail.workOrder.lat}
-                lng={detail.workOrder.lng}
-                helper="Abrimos la ubicacion externa sin montar Google Maps JS fuera del dashboard."
-              />
-            </>
-          ) : null}
-        </div>
-      </div>
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 border-t border-slate-200 pt-5">
+      <h2 className="text-[18px] font-semibold text-[#1d3557]">{title}</h2>
+      {children}
     </div>
   );
 }
@@ -118,4 +119,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="mt-1 font-semibold text-[#1d3557]">{value}</p>
     </div>
   );
+}
+
+function formatStatusLabel(status: "draft" | "ready_for_review" | "closed") {
+  switch (status) {
+    case "draft":
+      return "Borrador";
+    case "ready_for_review":
+      return "Listo para revision";
+    case "closed":
+      return "Cerrado";
+    default:
+      return status;
+  }
 }

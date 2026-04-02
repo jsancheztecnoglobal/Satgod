@@ -434,10 +434,33 @@ export async function getDashboardData() {
 }
 
 export async function getTechnicianAgenda(user: AuthenticatedUser) {
-  const workOrders = await listWorkOrders();
+  const [workOrders, supabase] = await Promise.all([listWorkOrders(), getSupabaseClient()]);
+  const detailedOrders = await supabase
+    .from("work_orders")
+    .select("id, description")
+    .is("deleted_at", null);
+  if (detailedOrders.error) throw new Error(detailedOrders.error.message);
+  const relevantReports = await supabase
+    .from("work_reports")
+    .select("id, work_order_id, status")
+    .order("created_at");
+  if (relevantReports.error) throw new Error(relevantReports.error.message);
   const technicianId = user.technicianId;
   const relevant = user.role === "technician" && technicianId ? workOrders.filter((item) => item.assignedTechnicianIds.includes(technicianId)) : workOrders;
-  return relevant.map((order) => ({ id: order.id, number: order.number, title: order.title, client: order.clientName, equipmentLabel: order.equipmentLabel, windowLabel: `${order.plannedStart.slice(11, 16)} - ${order.plannedEnd.slice(11, 16)}`, status: order.status, syncStatus: "synced" })) satisfies TechnicianAgendaItem[];
+  const descriptionsByWorkOrder = new Map((detailedOrders.data ?? []).map((item) => [item.id, item.description]));
+  const reportsByWorkOrder = new Map((relevantReports.data ?? []).map((item) => [item.work_order_id, item]));
+  return relevant.map((order) => ({
+    id: order.id,
+    number: order.number,
+    title: order.title,
+    client: order.clientName,
+    equipmentLabel: order.equipmentLabel,
+    notes: descriptionsByWorkOrder.get(order.id) ?? order.title,
+    reportId: reportsByWorkOrder.get(order.id)?.id ?? order.reportId,
+    windowLabel: `${order.plannedStart.slice(11, 16)} - ${order.plannedEnd.slice(11, 16)}`,
+    status: resolveAgendaStatus(order.status, reportsByWorkOrder.get(order.id)?.status as ReportStatus | undefined),
+    syncStatus: "synced",
+  })) satisfies TechnicianAgendaItem[];
 }
 
 export async function createClient(input: { name: string; taxId: string; city: string; address: string; postalCode: string; contactName: string; contactPhone: string }, user: AuthenticatedUser) {
@@ -482,11 +505,53 @@ export async function createWorkOrder(input: { title: string; description: strin
   return order.data.id as string;
 }
 
-export async function createWorkReportFromWorkOrder(workOrderId: string, user: AuthenticatedUser) {
+export async function createWorkReportFromWorkOrder(
+  workOrderId: string,
+  user: AuthenticatedUser,
+  options?: {
+    arrivalTime?: string;
+    openedAt?: string;
+    geoLat?: number;
+    geoLng?: number;
+  },
+) {
   const supabase = await getSupabaseClient();
   const existing = await supabase.from("work_reports").select("id").eq("work_order_id", workOrderId).maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
-  if (existing.data?.id) return existing.data.id as string;
+  if (existing.data?.id) {
+    const now = options?.openedAt ?? new Date().toISOString();
+    const updateOrder = await supabase
+      .from("work_orders")
+      .update({ actual_start: now, status: "in_progress", status_changed_at: now })
+      .eq("id", workOrderId)
+      .eq("status", "planned");
+    if (updateOrder.error) throw new Error(updateOrder.error.message);
+
+    if (options?.arrivalTime) {
+      const updateExistingReport = await supabase
+        .from("work_reports")
+        .update({ arrival_time: options.arrivalTime })
+        .eq("id", existing.data.id)
+        .eq("status", "draft");
+      if (updateExistingReport.error) throw new Error(updateExistingReport.error.message);
+    }
+
+    const workLogInsert = await supabase.from("work_logs").insert({
+      work_order_id: workOrderId,
+      log_type: "note",
+      body: "Parte abierto desde agenda tecnica.",
+      visibility: "internal",
+      device_created_at: now,
+      geo_lat: options?.geoLat ?? null,
+      geo_lng: options?.geoLng ?? null,
+      created_by: user.userId,
+      updated_by: user.userId,
+      source: "mobile",
+    });
+    if (workLogInsert.error) throw new Error(workLogInsert.error.message);
+
+    return existing.data.id as string;
+  }
   const assignment = await supabase.from("work_order_assignments").select("scheduled_start, scheduled_end, user_id").eq("work_order_id", workOrderId).limit(1).maybeSingle();
   if (assignment.error) throw new Error(assignment.error.message);
   const assignmentData = (assignment.data ?? {}) as {
@@ -506,19 +571,43 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
     technicianCode = technicianProfile.data?.technician_code ?? technicianCode;
   }
   const number = await nextSequentialNumber(supabase, "work_reports", "PARTE");
-  const report = await supabase.from("work_reports").insert({ number, work_order_id: workOrderId, technician_user_id: user.userId, technician_code: technicianCode ?? user.technicianId ?? "tecnico1", status: "draft", arrival_time: (assignmentData.scheduled_start ?? "08:00").slice(11, 16), departure_time: (assignmentData.scheduled_end ?? "09:00").slice(11, 16), work_done: "", pending_actions: "", client_name_signed: "" }).select("id").single();
+  const report = await supabase.from("work_reports").insert({ number, work_order_id: workOrderId, technician_user_id: user.userId, technician_code: technicianCode ?? user.technicianId ?? "tecnico1", status: "draft", arrival_time: options?.arrivalTime ?? (assignmentData.scheduled_start ?? "08:00").slice(11, 16), departure_time: (assignmentData.scheduled_end ?? "09:00").slice(11, 16), work_done: "", pending_actions: "", client_name_signed: "" }).select("id").single();
   if (report.error) throw new Error(report.error.message);
+  const now = options?.openedAt ?? new Date().toISOString();
+  const updateOrder = await supabase
+    .from("work_orders")
+    .update({ actual_start: now, status: "in_progress", status_changed_at: now })
+    .eq("id", workOrderId)
+    .in("status", ["planned", "draft", "pending_assignment"]);
+  if (updateOrder.error) throw new Error(updateOrder.error.message);
+  const historyInsert = await supabase
+    .from("work_order_status_history")
+    .insert({ work_order_id: workOrderId, to_status: "in_progress", reason: "Parte abierto por tecnico", source: "mobile", changed_by: user.userId });
+  if (historyInsert.error) throw new Error(historyInsert.error.message);
+  const workLogInsert = await supabase.from("work_logs").insert({
+    work_order_id: workOrderId,
+    log_type: "note",
+    body: "Parte abierto desde agenda tecnica.",
+    visibility: "internal",
+    device_created_at: now,
+    geo_lat: options?.geoLat ?? null,
+    geo_lng: options?.geoLng ?? null,
+    created_by: user.userId,
+    updated_by: user.userId,
+    source: "mobile",
+  });
+  if (workLogInsert.error) throw new Error(workLogInsert.error.message);
   return report.data.id as string;
 }
 
-export async function updateWorkReport(reportId: string, input: Pick<WorkReport, "arrivalTime" | "departureTime" | "workDone" | "pendingActions" | "clientNameSigned"> & { status?: ReportStatus }, user: AuthenticatedUser) {
+export async function updateWorkReport(reportId: string, input: Partial<Pick<WorkReport, "arrivalTime" | "departureTime" | "workDone" | "pendingActions" | "clientNameSigned">> & { status?: ReportStatus }, user: AuthenticatedUser) {
   const supabase = await getSupabaseClient();
   const now = new Date().toISOString();
-  const reportRecord = await supabase.from("work_reports").select("id, work_order_id").eq("id", reportId).maybeSingle();
+  const reportRecord = await supabase.from("work_reports").select("id, work_order_id, arrival_time, departure_time, work_done, pending_actions, client_name_signed, status").eq("id", reportId).maybeSingle();
   if (reportRecord.error) throw new Error(reportRecord.error.message);
   if (!reportRecord.data) throw new Error("Parte no encontrado.");
 
-  const result = await supabase.from("work_reports").update({ arrival_time: input.arrivalTime, departure_time: input.departureTime, work_done: input.workDone, pending_actions: input.pendingActions, client_name_signed: input.clientNameSigned, status: input.status, closed_at: input.status === "closed" ? now : null }).eq("id", reportId);
+  const result = await supabase.from("work_reports").update({ arrival_time: input.arrivalTime ?? reportRecord.data.arrival_time, departure_time: input.departureTime ?? reportRecord.data.departure_time, work_done: input.workDone ?? reportRecord.data.work_done, pending_actions: input.pendingActions ?? reportRecord.data.pending_actions, client_name_signed: input.clientNameSigned ?? reportRecord.data.client_name_signed, status: input.status ?? reportRecord.data.status, closed_at: input.status === "closed" ? now : null }).eq("id", reportId);
   if (result.error) throw new Error(result.error.message);
 
   if (input.status === "closed") {
@@ -535,6 +624,18 @@ export async function updateWorkReport(reportId: string, input: Pick<WorkReport,
     if (historyInsert.error) throw new Error(historyInsert.error.message);
   }
 }
+
+function resolveAgendaStatus(
+  workOrderStatus: WorkOrderStatus,
+  reportStatus?: ReportStatus,
+): WorkOrderStatus | ReportStatus {
+  if (reportStatus) {
+    return reportStatus;
+  }
+
+  return workOrderStatus;
+}
+
 
 export async function finalizeWorkOrder(workOrderId: string, user: AuthenticatedUser) {
   void user;

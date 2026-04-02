@@ -9,8 +9,16 @@ import type { WorkReport } from "@/lib/data/contracts";
 
 export function WorkReportDetailForm({
   report,
+  children,
+  showArrivalTime = true,
+  showClientNameField = true,
+  returnPath,
 }: {
   report: WorkReport;
+  children?: React.ReactNode;
+  showArrivalTime?: boolean;
+  showClientNameField?: boolean;
+  returnPath?: string;
 }) {
   const router = useRouter();
   const { isMobile } = useUiDevice();
@@ -42,6 +50,13 @@ export function WorkReportDetailForm({
 
         setError("");
         setFeedback(status === "closed" ? "Parte cerrado." : "Parte guardado.");
+
+        if (returnPath) {
+          router.push(returnPath);
+          router.refresh();
+          return;
+        }
+
         router.refresh();
       } catch (requestError) {
         setFeedback("");
@@ -54,25 +69,17 @@ export function WorkReportDetailForm({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-[#dbe7f4] bg-[#f7fafe] px-4 py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
-          Estado del parte
-        </p>
-        <p className="mt-2 text-base font-semibold text-[#1d3557]">{formatStatusLabel(form.status)}</p>
-        <p className="mt-1 text-sm text-slate-600">
-          Guarda durante la intervencion y cierra solo cuando el trabajo de campo haya terminado.
-        </p>
-      </div>
-
       <div className={cn("grid gap-4", !isMobile && "md:grid-cols-2")}>
-        <Field label="Hora llegada">
-          <input
-            type="time"
-            value={form.arrivalTime}
-            onChange={(event) => setForm({ ...form, arrivalTime: event.target.value })}
-            className={inputClassName}
-          />
-        </Field>
+        {showArrivalTime ? (
+          <Field label="Hora llegada">
+            <input
+              type="time"
+              value={form.arrivalTime}
+              onChange={(event) => setForm({ ...form, arrivalTime: event.target.value })}
+              className={inputClassName}
+            />
+          </Field>
+        ) : null}
         <Field label="Hora salida">
           <input
             type="time"
@@ -100,19 +107,23 @@ export function WorkReportDetailForm({
             className={inputClassName}
           />
         </Field>
-        <Field
-          label="Nombre cliente para firma"
-          className={!isMobile ? "md:col-span-2" : undefined}
-        >
-          <input
-            value={form.clientNameSigned}
-            onChange={(event) => setForm({ ...form, clientNameSigned: event.target.value })}
-            className={inputClassName}
-          />
-        </Field>
+        {showClientNameField ? (
+          <Field
+            label="Nombre cliente para firma"
+            className={!isMobile ? "md:col-span-2" : undefined}
+          >
+            <input
+              value={form.clientNameSigned}
+              onChange={(event) => setForm({ ...form, clientNameSigned: event.target.value })}
+              className={inputClassName}
+            />
+          </Field>
+        ) : null}
       </div>
 
-      <div className={cn("grid gap-3", !isMobile && "md:grid-cols-3")}>
+      {children}
+
+      <div className={cn("grid gap-3 pt-2", !isMobile && "md:grid-cols-3")}>
         <button
           type="button"
           disabled={pending}
@@ -170,17 +181,4 @@ function actionButtonClassName(colorClassName: string) {
     "w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)]",
     colorClassName,
   );
-}
-
-function formatStatusLabel(status: WorkReport["status"]) {
-  switch (status) {
-    case "draft":
-      return "Borrador";
-    case "ready_for_review":
-      return "Listo para revision";
-    case "closed":
-      return "Cerrado";
-    default:
-      return status;
-  }
 }

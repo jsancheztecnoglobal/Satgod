@@ -29,11 +29,11 @@ export async function PATCH(
     await updateWorkReport(
       id,
       {
-        arrivalTime: String(body.arrivalTime ?? ""),
-        departureTime: String(body.departureTime ?? ""),
-        workDone: String(body.workDone ?? ""),
-        pendingActions: String(body.pendingActions ?? ""),
-        clientNameSigned: String(body.clientNameSigned ?? ""),
+        arrivalTime: body.arrivalTime === undefined ? undefined : String(body.arrivalTime ?? ""),
+        departureTime: body.departureTime === undefined ? undefined : String(body.departureTime ?? ""),
+        workDone: body.workDone === undefined ? undefined : String(body.workDone ?? ""),
+        pendingActions: body.pendingActions === undefined ? undefined : String(body.pendingActions ?? ""),
+        clientNameSigned: body.clientNameSigned === undefined ? undefined : String(body.clientNameSigned ?? ""),
         status: body.status,
       },
       user,

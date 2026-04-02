@@ -496,6 +496,7 @@ export async function getDashboardData() {
 
 export async function getTechnicianAgenda(user: AuthenticatedUser) {
   const workOrders = await listWorkOrders();
+  const database = await readDatabase();
   const relevant =
     user.role === "technician" && user.technicianId
       ? workOrders.filter((item) => item.assignedTechnicianIds.includes(user.technicianId!))
@@ -507,8 +508,10 @@ export async function getTechnicianAgenda(user: AuthenticatedUser) {
     title: order.title,
     client: order.clientName,
     equipmentLabel: order.equipmentLabel,
+    notes: database.workOrders.find((item) => item.id === order.id)?.description ?? "",
+    reportId: order.reportId,
     windowLabel: `${order.plannedStart.slice(11, 16)} - ${order.plannedEnd.slice(11, 16)}`,
-    status: order.status,
+    status: resolveAgendaStatus(order.status, database.workReports.find((item) => item.workOrderId === order.id)?.status),
     syncStatus: "synced",
   })) satisfies TechnicianAgendaItem[];
 }
@@ -657,7 +660,16 @@ export async function createWorkOrder(
   return next.workOrders[next.workOrders.length - 1].id;
 }
 
-export async function createWorkReportFromWorkOrder(workOrderId: string, user: AuthenticatedUser) {
+export async function createWorkReportFromWorkOrder(
+  workOrderId: string,
+  user: AuthenticatedUser,
+  options?: {
+    arrivalTime?: string;
+    openedAt?: string;
+    geoLat?: number;
+    geoLng?: number;
+  },
+) {
   const now = new Date().toISOString();
 
   const next = await updateDatabase((current) => {
@@ -666,7 +678,44 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
       throw new Error("Orden no encontrada.");
     }
     if (workOrder.reportId) {
-      return current;
+      return {
+        ...current,
+        workOrders: current.workOrders.map((item) =>
+          item.id === workOrderId
+            ? {
+                ...item,
+                actualStart: item.actualStart ?? options?.openedAt ?? now,
+                status: item.status === "planned" ? "in_progress" : item.status,
+                updatedAt: now,
+              }
+            : item,
+        ),
+        workReports: current.workReports.map((item) =>
+          item.id === workOrder.reportId && options?.arrivalTime
+            ? {
+                ...item,
+                arrivalTime: options.arrivalTime,
+                updatedAt: now,
+              }
+            : item,
+        ),
+        audit: [
+          ...current.audit,
+          {
+            id: createId("audit"),
+            entityType: "work_order",
+            entityId: workOrderId,
+            action: "open_report",
+            userId: user.userId,
+            payload: {
+              openedAt: options?.openedAt ?? now,
+              geoLat: options?.geoLat,
+              geoLng: options?.geoLng,
+            },
+            createdAt: now,
+          },
+        ],
+      };
     }
     assertCanAccessWorkOrder(current, workOrderId, user);
     const assignment = getAssignmentForWorkOrder(current, workOrder);
@@ -683,7 +732,7 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
           workOrderId,
           technicianId: assignment?.technicianId ?? user.technicianId ?? "tecnico1",
           status: "draft",
-          arrivalTime: assignment?.startAt.slice(11, 16) ?? "08:00",
+          arrivalTime: options?.arrivalTime ?? assignment?.startAt.slice(11, 16) ?? "08:00",
           departureTime: assignment?.endAt.slice(11, 16) ?? "09:00",
           workDone: "",
           pendingActions: "",
@@ -693,7 +742,15 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
         },
       ],
       workOrders: current.workOrders.map((item) =>
-        item.id === workOrderId ? { ...item, reportId, updatedAt: now } : item,
+        item.id === workOrderId
+          ? {
+              ...item,
+              reportId,
+              actualStart: item.actualStart ?? options?.openedAt ?? now,
+              status: item.status === "planned" ? "in_progress" : item.status,
+              updatedAt: now,
+            }
+          : item,
       ),
       audit: [
         ...current.audit,
@@ -703,6 +760,11 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
           entityId: reportId,
           action: "create",
           userId: user.userId,
+          payload: {
+            openedAt: options?.openedAt ?? now,
+            geoLat: options?.geoLat,
+            geoLng: options?.geoLng,
+          },
           createdAt: now,
         },
       ],
@@ -724,7 +786,7 @@ export async function createWorkReportFromWorkOrder(workOrderId: string, user: A
 
 export async function updateWorkReport(
   reportId: string,
-  input: Pick<WorkReport, "arrivalTime" | "departureTime" | "workDone" | "pendingActions" | "clientNameSigned"> & {
+  input: Partial<Pick<WorkReport, "arrivalTime" | "departureTime" | "workDone" | "pendingActions" | "clientNameSigned">> & {
     status?: ReportStatus;
   },
   user: AuthenticatedUser,
@@ -745,11 +807,11 @@ export async function updateWorkReport(
         item.id === reportId
           ? {
               ...item,
-              arrivalTime: input.arrivalTime,
-              departureTime: input.departureTime,
-              workDone: input.workDone,
-              pendingActions: input.pendingActions,
-              clientNameSigned: input.clientNameSigned,
+              arrivalTime: input.arrivalTime ?? item.arrivalTime,
+              departureTime: input.departureTime ?? item.departureTime,
+              workDone: input.workDone ?? item.workDone,
+              pendingActions: input.pendingActions ?? item.pendingActions,
+              clientNameSigned: input.clientNameSigned ?? item.clientNameSigned,
               status: nextStatus,
               closedAt: nextStatus === "closed" ? now : undefined,
               updatedAt: now,
@@ -1169,4 +1231,15 @@ function formatStatusLabel(status: WorkOrderStatus) {
     default:
       return status;
   }
+}
+
+function resolveAgendaStatus(
+  workOrderStatus: WorkOrderStatus,
+  reportStatus?: ReportStatus,
+): WorkOrderStatus | ReportStatus {
+  if (reportStatus) {
+    return reportStatus;
+  }
+
+  return workOrderStatus;
 }
