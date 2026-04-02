@@ -109,16 +109,31 @@ export function DayScheduler({
 
     const overId = String(over.id);
     const targetEvent = localEvents.find((entry) => entry.id === overId);
-    const nextTechnicianId =
-      overId.startsWith("column:")
-        ? overId.replace("column:", "")
-        : targetEvent?.technicianId ?? draggedEvent.technicianId;
-
     const minuteDelta = Math.round(delta.y / (HOUR_HEIGHT / 2)) * 30;
     const startDate = new Date(draggedEvent.startAt);
     const endDate = new Date(draggedEvent.endAt);
-    const nextStartDate = new Date(startDate.getTime() + minuteDelta * 60_000);
-    const nextEndDate = new Date(endDate.getTime() + minuteDelta * 60_000);
+    const shiftedStartDate = new Date(startDate.getTime() + minuteDelta * 60_000);
+    const shiftedEndDate = new Date(endDate.getTime() + minuteDelta * 60_000);
+    const nextTechnicianId =
+      scope === "day"
+        ? overId.startsWith("column:")
+          ? overId.replace("column:", "")
+          : targetEvent?.technicianId ?? draggedEvent.technicianId
+        : draggedEvent.technicianId;
+    const targetDayKey =
+      scope === "week"
+        ? overId.startsWith("week-day:")
+          ? overId.replace("week-day:", "")
+          : targetEvent?.startAt.slice(0, 10) ?? draggedEvent.startAt.slice(0, 10)
+        : undefined;
+    const nextStartDate =
+      scope === "week" && targetDayKey
+        ? applyDayKeyToDate(shiftedStartDate, targetDayKey)
+        : shiftedStartDate;
+    const nextEndDate =
+      scope === "week" && targetDayKey
+        ? applyDayKeyToDate(shiftedEndDate, targetDayKey)
+        : shiftedEndDate;
     const optimisticEvent = rebasePlannerEvent(
       draggedEvent,
       nextTechnicianId,
@@ -359,12 +374,31 @@ export function DayScheduler({
             </DndContext>
             )
           ) : (
-            <WeeklyPlannerGrid
-              technicians={visibleTechnicians}
-              events={visibleEvents}
-              onSelectEvent={setSelectedEventId}
-              weekOffset={weekOffset}
-            />
+            allowDrag ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <WeeklyPlannerGrid
+                  technicians={visibleTechnicians}
+                  events={visibleEvents}
+                  onSelectEvent={setSelectedEventId}
+                  weekOffset={weekOffset}
+                  canEditSchedule={allowDrag}
+                  selectedEventId={selectedEvent?.id}
+                />
+              </DndContext>
+            ) : (
+              <WeeklyPlannerGrid
+                technicians={visibleTechnicians}
+                events={visibleEvents}
+                onSelectEvent={setSelectedEventId}
+                weekOffset={weekOffset}
+                canEditSchedule={false}
+                selectedEventId={selectedEvent?.id}
+              />
+            )
           )}
         </Panel>
 
@@ -606,11 +640,15 @@ function WeeklyPlannerGrid({
   events,
   onSelectEvent,
   weekOffset,
+  canEditSchedule,
+  selectedEventId,
 }: {
   technicians: Technician[];
   events: PlannerEvent[];
   onSelectEvent: (id: string) => void;
   weekOffset: number;
+  canEditSchedule: boolean;
+  selectedEventId?: string;
 }) {
   const baseDate = events[0] ? new Date(events[0].startAt) : new Date("2026-04-01T00:00:00.000Z");
   const dayOfWeek = baseDate.getUTCDay();
@@ -625,18 +663,32 @@ function WeeklyPlannerGrid({
 
   return (
     <div className="overflow-x-auto bg-[#f7fafe]">
-      <div className="grid min-w-[1120px] grid-cols-7 gap-px bg-slate-200">
+      <div
+        className="grid min-w-[1260px] gap-px bg-slate-200"
+        style={{ gridTemplateColumns: "84px repeat(7, minmax(160px, 1fr))" }}
+      >
+        <div className="bg-white">
+          <div className="border-b border-slate-200 px-3 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
+              Horas
+            </p>
+            <p className="mt-1 font-semibold text-[#1d3557]">Semana</p>
+          </div>
+          <HourRail />
+        </div>
         {weekDays.map((date) => {
           const dayKey = date.toISOString().slice(0, 10);
-          const dayEvents = events
-            .filter((event) => event.startAt.slice(0, 10) === dayKey)
-            .sort((left, right) => left.startAt.localeCompare(right.startAt));
+          const dayEvents = buildDayLayoutEvents(
+            events
+              .filter((event) => event.startAt.slice(0, 10) === dayKey)
+              .sort((left, right) => left.startAt.localeCompare(right.startAt)),
+          );
           const firstEvent = dayEvents[0];
           const lastEvent = dayEvents[dayEvents.length - 1];
           const totalDayMinutes = dayEvents.reduce((sum, event) => sum + event.durationMinutes, 0);
 
           return (
-            <div key={dayKey} className="min-h-[420px] bg-white">
+            <div key={dayKey} className="bg-white">
               <div className="border-b border-slate-200 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#52729b]">
                   {date.toLocaleDateString("es-ES", { weekday: "short" })}
@@ -655,35 +707,28 @@ function WeeklyPlannerGrid({
                   </span>
                 </div>
               </div>
-              <div className="space-y-3 p-4">
+              <div className="min-h-[420px]">
                 {dayEvents.length ? (
-                  dayEvents.map((event) => {
-                    const technician = technicians.find((item) => item.id === event.technicianId);
-                    return (
-                      <button
-                        key={event.id}
-                        type="button"
-                        onClick={() => onSelectEvent(event.id)}
-                        className="w-full rounded-xl px-3 py-3 text-left text-white shadow-[0_8px_18px_rgba(15,23,42,0.14)]"
-                        style={{ backgroundColor: event.color }}
-                      >
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90">
-                          {event.workOrderNumber}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold">{event.title}</p>
-                        <p className="mt-1 text-xs text-white/85">{event.clientName}</p>
-                        <p className="mt-2 inline-flex rounded-full bg-white/18 px-2 py-1 text-xs font-semibold text-white/95">
-                          {formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}
-                        </p>
-                        <p className="mt-1 text-xs text-white/90">
-                          {technician?.name ?? event.technicianId}
-                        </p>
-                      </button>
-                    );
-                  })
+                  <WeeklyDayColumn
+                    dayKey={dayKey}
+                    technicians={technicians}
+                    events={dayEvents}
+                    onSelectEvent={onSelectEvent}
+                    canEditSchedule={canEditSchedule}
+                    selectedEventId={selectedEventId}
+                  />
                 ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-500">
-                    Sin intervenciones planificadas.
+                  <div
+                    className="relative border-r border-slate-200 bg-white"
+                    style={{
+                      height: TOTAL_HEIGHT,
+                      backgroundImage:
+                        "repeating-linear-gradient(to bottom, transparent 0, transparent 38px, rgba(148,163,184,0.14) 38px, rgba(148,163,184,0.14) 39px, transparent 39px, transparent 78px), repeating-linear-gradient(to bottom, rgba(203,213,225,0.7) 0, rgba(203,213,225,0.7) 1px, transparent 1px, transparent 78px)",
+                    }}
+                  >
+                    <div className="absolute inset-x-3 top-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                      Sin intervenciones planificadas.
+                    </div>
                   </div>
                 )}
               </div>
@@ -692,6 +737,122 @@ function WeeklyPlannerGrid({
         })}
       </div>
     </div>
+  );
+}
+
+function WeeklyDayColumn({
+  dayKey,
+  technicians,
+  events,
+  onSelectEvent,
+  canEditSchedule,
+  selectedEventId,
+}: {
+  dayKey: string;
+  technicians: Technician[];
+  events: DayLayoutEvent[];
+  onSelectEvent: (id: string) => void;
+  canEditSchedule: boolean;
+  selectedEventId?: string;
+}) {
+  const { setNodeRef } = useDroppable({
+    id: `week-day:${dayKey}`,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="relative border-r border-slate-200 bg-white"
+      style={{
+        height: TOTAL_HEIGHT,
+        backgroundImage:
+          "repeating-linear-gradient(to bottom, transparent 0, transparent 38px, rgba(148,163,184,0.14) 38px, rgba(148,163,184,0.14) 39px, transparent 39px, transparent 78px), repeating-linear-gradient(to bottom, rgba(203,213,225,0.7) 0, rgba(203,213,225,0.7) 1px, transparent 1px, transparent 78px)",
+      }}
+    >
+      {events.map((event) => {
+        const top =
+          (((event.startHour - START_HOUR) * 60 + event.startMinute) / 60) * HOUR_HEIGHT;
+        const height = Math.max((event.durationMinutes / 60) * HOUR_HEIGHT, 56);
+
+        return (
+          <WeeklyPlannerEventButton
+            key={event.id}
+            event={event}
+            technician={technicians.find((item) => item.id === event.technicianId)}
+            top={top}
+            height={height}
+            onSelectEvent={onSelectEvent}
+            canEditSchedule={canEditSchedule}
+            isSelected={selectedEventId === event.id}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function WeeklyPlannerEventButton({
+  event,
+  technician,
+  top,
+  height,
+  onSelectEvent,
+  canEditSchedule,
+  isSelected,
+}: {
+  event: DayLayoutEvent;
+  technician?: Technician;
+  top: number;
+  height: number;
+  onSelectEvent: (id: string) => void;
+  canEditSchedule: boolean;
+  isSelected: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: event.id,
+    disabled: !canEditSchedule,
+  });
+  const columnInset = 8;
+  const overlapOffset = event.overlapCount > 1 ? 16 : 0;
+  const leftInset = columnInset + event.overlapIndex * overlapOffset;
+  const rightInset = columnInset + (event.overlapCount - event.overlapIndex - 1) * overlapOffset;
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={() => onSelectEvent(event.id)}
+      className={`absolute rounded-xl px-2.5 py-2 text-left text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)] ${
+        isSelected ? "ring-2 ring-white/80" : ""
+      }`}
+      style={{
+        top,
+        height,
+        left: leftInset,
+        right: rightInset,
+        backgroundColor: event.color,
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.82 : 1,
+        cursor: canEditSchedule ? "grab" : "pointer",
+        zIndex: isDragging ? 30 : isSelected ? 20 : 10 + event.overlapIndex,
+      }}
+      {...listeners}
+      {...attributes}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90">
+          {event.workOrderNumber}
+        </p>
+        <span className="rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold text-white/95">
+          {technician?.code ?? event.technicianId}
+        </span>
+      </div>
+      <p className="mt-1 text-xs font-semibold leading-4">{event.title}</p>
+      <p className="mt-1 inline-flex rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold text-white/95">
+        {formatTime(event.startHour, event.startMinute)} - {formatEndTime(event)}
+      </p>
+      <p className="mt-1 text-[10px] text-white/85">{technician?.name ?? event.technicianId}</p>
+    </button>
   );
 }
 
@@ -932,6 +1093,13 @@ function rebasePlannerEvent(
       30,
     ),
   };
+}
+
+function applyDayKeyToDate(date: Date, dayKey: string) {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const nextDate = new Date(date);
+  nextDate.setFullYear(year, month - 1, day);
+  return nextDate;
 }
 
 function formatDurationHours(minutes: number) {
