@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query-persist-client";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
+import { RuntimeCleanup } from "@/components/layout/runtime-cleanup";
 import { queryPersister } from "@/lib/offline/query-persister";
 
 export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -28,6 +29,7 @@ export function AppProviders({ children }: Readonly<{ children: React.ReactNode 
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: queryPersister }}>
+      <RuntimeCleanup />
       {children}
       <ReactQueryDevtools initialIsOpen={false} />
     </PersistQueryClientProvider>
